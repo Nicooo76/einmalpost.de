@@ -13,6 +13,16 @@ set -uo pipefail
 BEANSTANDET=0
 
 echo "==> Wurden Zugangsdateien jemals erfasst?"
+# Ein flacher Klon hat keine Historie. Die Prüfung liefe durch und meldete
+# "sauber", ohne einen einzigen alten Commit gesehen zu haben - das wäre
+# schlimmer als keine Prüfung, weil es wie eine bestandene aussieht.
+if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+    echo "  FEHLER: flacher Klon - die Historie ist hier gar nicht vorhanden."
+    echo "          Vollständig holen (git fetch --unshallow) oder in der"
+    echo "          fortlaufenden Prüfung fetch-depth: 0 setzen."
+    exit 1
+fi
+
 TREFFER=$(git log --all --full-history --oneline \
     -- 'config/config.php' 'config/*.local.php' '.env' '.env.*' '*.pem' '*.key' 'id_rsa*' 2>/dev/null)
 

@@ -55,6 +55,12 @@ jobs:
     steps:
       - name: Quellcode holen
         uses: actions/checkout@v4
+        with:
+          # Die ganze Historie, nicht nur den letzten Commit: check-secrets
+          # durchsucht jeden Commit nach Zugangsdaten. Mit einem flachen Klon
+          # liefe die Prüfung durch, ohne etwas gesehen zu haben - und meldete
+          # trotzdem "sauber".
+          fetch-depth: 0
 
       - name: PHP einrichten
         uses: shivammathur/setup-php@v2
@@ -99,13 +105,33 @@ jobs:
         if: steps.browser-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium firefox webkit
 
+      - name: MariaDB-Client installieren
+        # Die Läufer bringen den Client von MySQL mit, nicht den von MariaDB.
+        # Geprüft wird aber gegen MariaDB 10.11, die Fassung auf dem
+        # Zielserver - dann soll auch der Client derselbe sein.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb --version
+
       - name: Event-Scheduler einschalten
         # Ohne ihn läuft das MariaDB-Event nie, und der Test zu Zusage 10
         # wird rot - zu Recht: Ein Event, das nicht läuft, ist kein zweites
         # Aufräumnetz.
+        #
+        # Das Einschalten allein genügt nicht als Nachweis: Gelesen wird
+        # danach zurück, sonst liefe der Prüflauf mit einem Scheduler weiter,
+        # der stillschweigend aus blieb.
         run: |
           mariadb -h 127.0.0.1 -P 3306 --protocol=TCP -u root \
-            -e "SET GLOBAL event_scheduler = ON; SELECT @@event_scheduler;"
+            -e "SET GLOBAL event_scheduler = ON;"
+          STAND=$(mariadb -h 127.0.0.1 -P 3306 --protocol=TCP -u root -N -B \
+            -e "SELECT @@event_scheduler;")
+          echo "event_scheduler = $STAND"
+          if [ "$STAND" != "ON" ]; then
+            echo "FEHLER: Der Scheduler ließ sich nicht einschalten."
+            exit 1
+          fi
 
       - name: Keine Gestaltung im Repository
         # Gegenprobe zur Aufteilung: theme.css, Schriften und Bildmaterial
