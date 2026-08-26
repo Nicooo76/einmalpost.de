@@ -67,7 +67,13 @@ test.describe('Browserkonsole', () => {
         test(`${pfad} lädt ohne Fehler`, async ({ page }) => {
             const meldungen = beobachte(page);
 
-            await page.goto(pfad, { waitUntil: 'networkidle' });
+            // Nicht 'networkidle': Das wartet nach der letzten Anfrage noch
+            // eine halbe Sekunde ab und macht diese acht Prüfungen über sechs
+            // Browserprofile zum langsamsten Teil des ganzen Laufs. Für
+            // Skriptfehler genügt 'load' - danach ist alles ausgeführt, was
+            // beim Laden ausgeführt wird.
+            await page.goto(pfad);
+            await page.waitForLoadState('load');
 
             expect(meldungen, meldungen.join(' | ')).toEqual([]);
         });
