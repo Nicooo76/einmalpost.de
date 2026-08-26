@@ -31,9 +31,12 @@ final class GestaltungOptionalTest extends TestCase
 
     private string $beiseite = '';
 
+    /** Wahr, wenn dieser Test die Datei selbst angelegt hat. */
+    private bool $selbstAngelegt = false;
+
     protected function setUp(): void
     {
-        $this->vorlage = dirname(__DIR__, 2) . '/public/assets/theme.css';
+        $this->vorlage  = dirname(__DIR__, 2) . '/public/assets/theme.css';
         $this->beiseite = $this->vorlage . '.beiseite-fuer-den-test';
     }
 
@@ -42,6 +45,29 @@ final class GestaltungOptionalTest extends TestCase
         if (is_file($this->beiseite)) {
             rename($this->beiseite, $this->vorlage);
         }
+
+        if ($this->selbstAngelegt && is_file($this->vorlage)) {
+            unlink($this->vorlage);
+            $this->selbstAngelegt = false;
+        }
+    }
+
+    /**
+     * Sorgt dafür, dass es eine theme.css gibt - notfalls eine eigene.
+     *
+     * Auf einem Entwicklungsrechner liegt sie da. In der fortlaufenden
+     * Prüfung nie: Das Aussehen gehört nicht ins Repository. Ein Test, der
+     * ihr Vorhandensein voraussetzt, wäre dort rot - und zwar nicht, weil
+     * etwas kaputt ist, sondern weil er die falsche Annahme trifft.
+     */
+    private function sorgeFuerThemeCss(): void
+    {
+        if (is_file($this->vorlage)) {
+            return;
+        }
+
+        file_put_contents($this->vorlage, "/* nur für diesen Test */\n:root { --probe: 1; }\n");
+        $this->selbstAngelegt = true;
     }
 
     /**
@@ -63,7 +89,7 @@ final class GestaltungOptionalTest extends TestCase
 
     public function testOhneTheseCssStehtKeinVerweisDarauf(): void
     {
-        self::assertFileExists($this->vorlage, 'Für diesen Test muss theme.css lokal da sein.');
+        $this->sorgeFuerThemeCss();
 
         rename($this->vorlage, $this->beiseite);
 
@@ -83,7 +109,7 @@ final class GestaltungOptionalTest extends TestCase
 
     public function testMitThemeCssStehtDerVerweisDa(): void
     {
-        self::assertFileExists($this->vorlage);
+        $this->sorgeFuerThemeCss();
 
         $html = $this->kopfbereich();
 
