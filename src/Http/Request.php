@@ -17,6 +17,15 @@ final class Request
         public readonly string $path,
         public readonly string $body,
         public readonly string $clientIp,
+        /**
+         * Was der Absender angekündigt hat.
+         *
+         * Wird gebraucht, um den Fall zu erkennen, dass PHP den Rumpf wegen
+         * post_max_size verworfen hat: Dann ist body leer, obwohl etwas
+         * unterwegs war. Ohne diese Angabe sähe das aus wie eine leere
+         * Anfrage, und der Absender bekäme eine irreführende Meldung.
+         */
+        public readonly int $angekuendigteGroesse = 0,
     ) {
     }
 
@@ -36,6 +45,14 @@ final class Request
         // jeder frei setzen, und das Rate-Limit wäre damit wirkungslos.
         $ip = is_string($server['REMOTE_ADDR'] ?? null) ? $server['REMOTE_ADDR'] : '';
 
-        return new self($method, is_string($path) ? $path : '/', $body, $ip);
+        $angekuendigt = $server['CONTENT_LENGTH'] ?? null;
+
+        return new self(
+            $method,
+            is_string($path) ? $path : '/',
+            $body,
+            $ip,
+            is_numeric($angekuendigt) ? (int) $angekuendigt : 0
+        );
     }
 }

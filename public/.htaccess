@@ -12,5 +12,11 @@
 # Verzeichnisinhalte nie auflisten.
 Options -Indexes
 
+# Die PHP-Einstellungen sind Konfiguration, kein Inhalt. PHP wertet sie aus,
+# ausliefern soll sie niemand.
+<FilesMatch "^\.user\.ini$">
+    Require all denied
+</FilesMatch>
+
 # Strict-Transport-Security wird bewusst NICHT hier gesetzt, sondern auf der
 # nginx-Ebene. Genau eine Quelle - sonst kommt die Kopfzeile doppelt an.

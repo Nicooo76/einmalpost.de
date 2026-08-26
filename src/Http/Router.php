@@ -6,6 +6,7 @@ namespace Einmalpost\Http;
 
 use Einmalpost\Base64Url;
 use Einmalpost\RateLimiter;
+use Einmalpost\Sprache;
 use Einmalpost\SecretStore;
 use Einmalpost\ValidationError;
 use Einmalpost\View;
@@ -30,21 +31,46 @@ final class Router
     public const NICHT_GEFUNDEN_STATUS = 404;
 
     /**
-     * Seiten, die nur Text zeigen. Pfad => [Titel, Beschreibung].
+     * Höchstgröße eines Anfragerumpfs: 25 MB.
      *
-     * @var array<string, array{string, string}>
+     * Ein payload von 17 MiB wird als base64url rund 23,8 MB groß, dazu der
+     * JSON-Rahmen.
+     */
+    public const RUMPF_MAX_BYTES = 26_214_400;
+
+    /**
+     * Seiten, die nur Text zeigen.
+     *
+     * Sprache => Pfad => [Vorlage, Titel, Beschreibung].
+     *
+     * @var array<string, array<string, array{string, string, string}>>
      */
     private const INHALTSSEITEN = [
-        '/impressum'   => ['Impressum', 'Anbieterkennzeichnung nach § 5 DDG.'],
-        '/datenschutz' => [
-            'Datenschutz',
-            'Was einmalpost speichert und was ausdrücklich nicht: keine IP-Adresse im '
-            . 'Klartext, kein Erstellungszeitpunkt, keine Zugriffsprotokolle.',
+        Sprache::DEUTSCH => [
+            '/impressum'   => ['impressum', 'Impressum', 'Anbieterkennzeichnung nach § 5 DDG.'],
+            '/datenschutz' => [
+                'datenschutz',
+                'Datenschutz',
+                'Was einmalpost speichert und was ausdrücklich nicht: keine IP-Adresse im '
+                . 'Klartext, kein Erstellungszeitpunkt, keine Zugriffsprotokolle.',
+            ],
+            '/sicherheit'  => [
+                'sicherheit',
+                'Sicherheit',
+                'Wie die Verschlüsselung im Browser abläuft, was auf dem Server liegt — und die '
+                . 'eine Grenze, die sich nicht schließen lässt.',
+            ],
         ],
-        '/sicherheit'  => [
-            'Sicherheit',
-            'Wie die Verschlüsselung im Browser abläuft, was auf dem Server liegt — und die '
-            . 'eine Grenze, die sich nicht schließen lässt.',
+        // Impressum und Datenschutz gibt es nur auf Deutsch: Sie gelten nach
+        // deutschem Recht, und eine Übersetzung wäre eine unverbindliche
+        // Zweitfassung. Der Fußbereich verweist auf sie und sagt das dazu.
+        Sprache::ENGLISCH => [
+            '/security' => [
+                'security',
+                'Security',
+                'How encryption works in your browser, what the server holds — and the one '
+                . 'limit that cannot be closed.',
+            ],
         ],
     ];
 
@@ -56,20 +82,21 @@ final class Router
 
     public function dispatch(Request $request): Response
     {
-        $pfad    = $request->path;
+        [$sprache, $pfad] = Sprache::ausPfad($request->path);
+
         $methode = $request->method === 'HEAD' ? 'GET' : $request->method;
 
         if ($pfad === '/' || $pfad === '') {
-            return $methode === 'GET' ? $this->seiteErstellen() : $this->methodeNichtErlaubt();
+            return $methode === 'GET' ? $this->seiteErstellen($sprache) : $this->methodeNichtErlaubt();
         }
 
         if (str_starts_with($pfad, '/s/')) {
-            return $methode === 'GET' ? $this->seiteAnzeigen() : $this->methodeNichtErlaubt();
+            return $methode === 'GET' ? $this->seiteAnzeigen($sprache) : $this->methodeNichtErlaubt();
         }
 
-        if (isset(self::INHALTSSEITEN[$pfad])) {
+        if (isset(self::INHALTSSEITEN[$sprache][$pfad])) {
             return $methode === 'GET'
-                ? $this->inhaltsseite($pfad)
+                ? $this->inhaltsseite($sprache, $pfad)
                 : $this->methodeNichtErlaubt();
         }
 
@@ -88,11 +115,11 @@ final class Router
     // Seiten
     // ------------------------------------------------------------------
 
-    private function seiteErstellen(): Response
+    private function seiteErstellen(string $sprache): Response
     {
         $nonce = SecurityHeaders::nonce();
 
-        return Response::html(200, View::createPage($nonce), SecurityHeaders::forNonce($nonce));
+        return Response::html(200, View::createPage($nonce, $sprache), SecurityHeaders::forNonce($nonce));
     }
 
     /**
@@ -102,7 +129,7 @@ final class Router
      * Die ID wird nicht einmal ausgewertet - das erledigt der Browser aus
      * der Adresse. Vorschau-Bots können hier nichts verbrennen.
      */
-    private function seiteAnzeigen(): Response
+    private function seiteAnzeigen(string $sprache): Response
     {
         $nonce = SecurityHeaders::nonce();
 
@@ -111,20 +138,20 @@ final class Router
         // verrät obendrein die Struktur.
         return Response::html(
             200,
-            View::revealPage($nonce),
+            View::revealPage($nonce, $sprache),
             ['X-Robots-Tag' => 'noindex, nofollow'] + SecurityHeaders::forNonce($nonce)
         );
     }
 
-    private function inhaltsseite(string $pfad): Response
+    private function inhaltsseite(string $sprache, string $pfad): Response
     {
-        [$titel, $beschreibung] = self::INHALTSSEITEN[$pfad];
+        [$vorlage, $titel, $beschreibung] = self::INHALTSSEITEN[$sprache][$pfad];
 
         $nonce = SecurityHeaders::nonce();
 
         return Response::html(
             200,
-            View::infoPage(ltrim($pfad, '/'), $nonce, $titel, $beschreibung),
+            View::infoPage($vorlage, $nonce, $titel, $beschreibung, $sprache),
             SecurityHeaders::forNonce($nonce)
         );
     }
@@ -135,6 +162,13 @@ final class Router
 
     private function apiErstellen(Request $request): Response
     {
+        // Zu groß ist etwas anderes als unbrauchbar. Wer 20 MB schickt, soll
+        // das erfahren und nicht rätseln - zumal PHP den Rumpf bei
+        // Überschreiten von post_max_size stillschweigend verwirft.
+        if ($this->istZuGross($request)) {
+            return $this->fehler(413, 'zu_gross');
+        }
+
         $daten = $this->jsonRumpf($request);
 
         if ($daten === null) {
@@ -234,11 +268,30 @@ final class Router
     }
 
     /**
+     * Wurde mehr geschickt, als angenommen wird - oder hat PHP den Rumpf
+     * bereits verworfen?
+     */
+    private function istZuGross(Request $request): bool
+    {
+        if (strlen($request->body) > self::RUMPF_MAX_BYTES) {
+            return true;
+        }
+
+        // PHP wirft den Rumpf weg, wenn er post_max_size überschreitet, und
+        // hinterlässt eine leere Eingabe bei gesetzter Content-Length.
+        return $request->body === '' && $request->angekuendigteGroesse > 0;
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
     private function jsonRumpf(Request $request): ?array
     {
-        if ($request->body === '' || strlen($request->body) > 200_000) {
+        // base64url bläht um ein Drittel auf, dazu kommt der JSON-Rahmen.
+        // Alles darüber wird gar nicht erst zerlegt: Ein Rumpf, der die
+        // Grenze reißt, wird ohnehin abgelehnt, und das Zerlegen kostet
+        // Speicher.
+        if ($request->body === '' || strlen($request->body) > self::RUMPF_MAX_BYTES) {
             return null;
         }
 

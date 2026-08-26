@@ -14,8 +14,26 @@ namespace Einmalpost;
  */
 final class View
 {
-    public static function createPage(string $nonce): string
+    public static function createPage(string $nonce, string $sprache = Sprache::DEUTSCH): string
     {
+        if ($sprache === Sprache::ENGLISCH) {
+            return self::render(
+                'en/create',
+                $nonce,
+                new PageMeta(
+                    'einmalpost — share passwords and confidential data safely',
+                    'One text or file, one link, a single retrieval. Encrypted in your '
+                    . 'browser; the server cannot read it. No sign-up.',
+                    'page--create',
+                    indexierbar: true,
+                    mitOpenGraph: true,
+                    canonical: '/en',
+                    sprache: Sprache::ENGLISCH,
+                ),
+                self::faqSchema($nonce, Sprache::ENGLISCH)
+            );
+        }
+
         return self::render(
             'create',
             $nonce,
@@ -32,28 +50,46 @@ final class View
         );
     }
 
-    public static function revealPage(string $nonce): string
+    public static function revealPage(string $nonce, string $sprache = Sprache::DEUTSCH): string
     {
+        $englisch = $sprache === Sprache::ENGLISCH;
+
         return self::render(
-            'reveal',
+            $englisch ? 'en/reveal' : 'reveal',
             $nonce,
             new PageMeta(
-                'Vertraulicher Text — einmalpost',
-                'Dieser Text wird genau einmal angezeigt und dabei gelöscht.',
+                $englisch ? 'Confidential content — einmalpost' : 'Vertraulicher Inhalt — einmalpost',
+                $englisch
+                    ? 'This content is shown exactly once and deleted in the same moment.'
+                    : 'Dieser Inhalt wird genau einmal bereitgestellt und dabei gelöscht.',
                 'page--reveal',
                 // Auf /s/* wird nichts indexiert und nichts geteilt.
                 indexierbar: false,
                 mitOpenGraph: false,
+                sprache: $sprache,
             )
         );
     }
 
-    public static function infoPage(string $seite, string $nonce, string $titel, string $beschreibung): string
-    {
+    public static function infoPage(
+        string $seite,
+        string $nonce,
+        string $titel,
+        string $beschreibung,
+        string $sprache = Sprache::DEUTSCH,
+    ): string {
+        $vorlage = $sprache === Sprache::ENGLISCH ? 'en/' . $seite : $seite;
+
         return self::render(
-            $seite,
+            $vorlage,
             $nonce,
-            new PageMeta($titel . ' — einmalpost', $beschreibung, 'page--info', canonical: '/' . $seite)
+            new PageMeta(
+                $titel . ' — einmalpost',
+                $beschreibung,
+                'page--info',
+                canonical: Sprache::zuPfad($sprache, '/' . $seite),
+                sprache: $sprache,
+            )
         );
     }
 
@@ -79,7 +115,78 @@ final class View
      * Auszeichnung, die etwas anderes behauptet als die Seite, ist eine
      * Falschangabe gegenüber Suchmaschinen.
      */
-    private static function faqSchema(string $nonce): string
+    private static function faqSchema(string $nonce, string $sprache = Sprache::DEUTSCH): string
+    {
+        $fragen = $sprache === Sprache::ENGLISCH ? self::faqEnglisch() : self::faqDeutsch();
+
+        $eintraege = [];
+
+        foreach ($fragen as [$frage, $antwort]) {
+            $eintraege[] = [
+                '@type'          => 'Question',
+                'name'           => $frage,
+                'acceptedAnswer' => ['@type' => 'Answer', 'text' => $antwort],
+            ];
+        }
+
+        $daten = json_encode(
+            ['@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => $eintraege],
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG
+        );
+
+        return sprintf(
+            '<script type="application/ld+json" nonce="%s">%s</script>',
+            htmlspecialchars($nonce, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            $daten
+        );
+    }
+
+    /**
+     * @return list<array{string, string}>
+     */
+    private static function faqEnglisch(): array
+    {
+        return [
+            [
+                'Can the server read my message?',
+                'No. Your text is encrypted in your browser before it leaves your device. The '
+                . 'key sits only in the part of the link after the hash mark, and browsers do '
+                . 'not send that part to servers. What the server holds is ciphertext it '
+                . 'cannot read.',
+            ],
+            [
+                'Do I need an account?',
+                'No. There is no sign-up, no registration and no email address. You write '
+                . 'something and you get a link.',
+            ],
+            [
+                'Can I trust einmalpost?',
+                'Only so far — and we would rather say that than hide it. The encryption runs '
+                . 'in your browser, but the JavaScript doing it comes from our server. A '
+                . 'tampered server could serve code that sends the key along, and you would '
+                . 'not notice. That is true of every service of this kind. The source code is '
+                . 'open: github.com/Nicooo76/einmalpost.de — you can compare what you are '
+                . 'served, and you can run einmalpost on your own server.',
+            ],
+            [
+                'What if someone intercepts the link?',
+                'Then they have everything. The link contains the key — anyone who reads it in '
+                . 'full can open the content. Once, like anyone else. Use a passphrase if the '
+                . 'link travels somewhere you do not fully trust.',
+            ],
+            [
+                'Does the link stay in my browser history?',
+                'Yes. The content is deleted after being shown, but the address including the '
+                . 'key remains in the browser history — yours and the recipient\'s — and '
+                . 'usually in the message you sent it with.',
+            ],
+        ];
+    }
+
+    /**
+     * @return list<array{string, string}>
+     */
+    private static function faqDeutsch(): array
     {
         $fragen = [
             [
@@ -118,25 +225,6 @@ final class View
             ],
         ];
 
-        $eintraege = [];
-
-        foreach ($fragen as [$frage, $antwort]) {
-            $eintraege[] = [
-                '@type'          => 'Question',
-                'name'           => $frage,
-                'acceptedAnswer' => ['@type' => 'Answer', 'text' => $antwort],
-            ];
-        }
-
-        $daten = json_encode(
-            ['@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => $eintraege],
-            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG
-        );
-
-        return sprintf(
-            '<script type="application/ld+json" nonce="%s">%s</script>',
-            htmlspecialchars($nonce, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-            $daten
-        );
+        return $fragen;
     }
 }

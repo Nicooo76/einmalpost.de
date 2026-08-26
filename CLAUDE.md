@@ -57,52 +57,77 @@ liegen außerhalb des Repositorys.
 
 - **AES-256-GCM** über `crypto.subtle`. Niemals AES-CBC oder AES-CTR, niemals Verschlüsselung
   ohne Authentifizierung.
-- **Schlüssel:** 256 Bit aus `crypto.getRandomValues`, als `raw` exportiert, base64url in das Fragment.
+- **Schlüssel:** 256 Bit aus `crypto.getRandomValues`, als `raw` exportiert, base64url in das
+  Fragment.
 - **IV:** 12 Byte, pro Geheimnis frisch aus `crypto.getRandomValues`.
-- **Gespeichert wird:** `payload = iv(12) ‖ ciphertext ‖ tag(16)`
-- **Auffüllen vor dem Verschlüsseln:** 4 Byte Länge als Big-Endian-uint32, dann die UTF-8-Bytes
-  des Klartexts, dann Nullbytes bis zum nächsten Vielfachen von 256 Byte, mindestens 256 Byte.
-  *Ohne das verrät die gespeicherte Länge, ob dort ein Passwort oder ein Zertifikat liegt.*
 - **Geheimnis-ID:** `random_bytes(16)` in PHP, gespeichert als `BINARY(16)`, im Link base64url
   (22 Zeichen).
-- **Version 1 hat keine Passphrase und keine Benutzerkonten.**
 
-### Aufbau des aufgefüllten Klartexts
+### Aufbau des payload
 
 ```
-+--------+------------------+---------------------------+
-| 4 Byte | n Byte           | Nullbytes                 |
-| Länge  | UTF-8-Klartext   | bis Vielfaches von 256    |
-| (BE)   |                  | (Gesamtlänge >= 256)      |
-+--------+------------------+---------------------------+
+version(1) ‖ [salz(16)] ‖ iv(12) ‖ ciphertext ‖ tag(16)
 ```
 
-Beim Entschlüsseln wird die Länge aus den ersten 4 Byte gelesen und exakt so viele Bytes
-als UTF-8 dekodiert. Die Nullbytes danach werden verworfen. Ein Nullbyte **innerhalb** des
-Klartexts bleibt dadurch erhalten — es wird nicht als Ende gelesen.
+- **Version 1:** ohne Passphrase, kein Salz.
+- **Version 2:** mit Passphrase, 16 Byte Salz für die Ableitung.
 
-Daraus folgt die Grenze der ersten Stufe: 4 Byte Längenfeld plus 252 Byte Klartext füllen
-genau einen Block von 256 Byte. **Klartexte bis 252 Byte sind daher an ihrer gespeicherten
-Länge nicht zu unterscheiden**; ab 253 Byte gilt die nächste Stufe. Die gespeicherte Länge
-verrät die Blockstufe, nicht die Länge des Inhalts.
+Das Versionsbyte steht vorn, damit sich das Format erweitern lässt — und damit die
+Anzeigeseite weiß, ob sie nach einer Passphrase fragen muss, **bevor** sie abruft.
 
-**Das Längenfeld wird beim Entpacken validiert.** Ist der Wert größer als der tatsächlich
-verfügbare Puffer (`länge > gesamtlänge - 4`), wird **abgelehnt statt gelesen** — mit
-demselben Fehler wie eine fehlgeschlagene GCM-Prüfung. Es wird nichts abgeschnitten, nichts
-gekürzt und kein Teilinhalt angezeigt. Ohne diese Prüfung wird aus einem manipulierten
+### Aufbau des Klartexts, vor dem Verschlüsseln
+
+```
+typ(1) ‖ namenslaenge(2) ‖ name ‖ laenge(4) ‖ inhalt ‖ nullbytes
+```
+
+`typ` ist 0 für Text und 1 für eine Datei. Aufgefüllt wird mit Nullbytes bis zum nächsten
+Vielfachen von **256 Byte**, mindestens 256. *Ohne das verrät die gespeicherte Länge, ob dort
+ein Kennwort oder ein Zertifikat liegt.*
+
+Der Kopf ist bei einem Text 7 Byte lang. Daraus folgt die Grenze der ersten Stufe:
+**Klartexte bis 249 Byte sind an ihrer gespeicherten Länge nicht zu unterscheiden**; ab
+250 Byte gilt die nächste Stufe.
+
+**Jede Längenangabe wird beim Entpacken geprüft, nicht geglaubt.** Ist ein Wert größer als
+der verfügbare Puffer, wird abgelehnt statt gelesen — sonst wird aus einem manipulierten
 Längenfeld ein Lesezugriff über das Pufferende hinaus.
 
----
+### Passphrase
+
+Freiwillig. Ist eine gesetzt, wird der tatsächliche Schlüssel aus **beidem** abgeleitet:
+
+```
+schluessel = zufall(32) XOR PBKDF2-SHA256(passphrase, salz, 600.000 Runden)
+```
+
+Im Link steht weiterhin nur der Zufallsanteil, gekennzeichnet durch das Präfix `p.` im
+Fragment. Wer den Link abfängt, hat ohne die Passphrase nichts; wer die Passphrase errät,
+ohne den Link zu haben, ebenfalls.
+
+600.000 Runden entsprechen der OWASP-Empfehlung für PBKDF2 mit SHA-256 und dauern auf einem
+Telefon etwa eine Sekunde.
+
+**Gefragt wird vor dem Abruf.** Würde erst abgerufen und dann gefragt, wäre das Geheimnis bei
+einem Tippfehler verbraucht und unwiederbringlich weg.
+
+### Größen
+
+| | |
+|---|---|
+| Was ein Absender hineinlegen darf | **16 MB** (16.000.000 Byte), Text oder Datei |
+| Höchstgröße des payload | 16.500.000 Byte, hart geprüft und als CHECK in der Datenbank |
+| Warum nicht mehr | MariaDBs `max_allowed_packet` liegt bei 16 MiB; ein größerer payload ließe sich gar nicht erst schreiben |
 
 ## 5. Datenmodell — genau diese Spalten, keine weiteren
 
 ```sql
 CREATE TABLE secrets (
   id          BINARY(16) NOT NULL PRIMARY KEY,
-  payload     MEDIUMBLOB NOT NULL,
+  payload     LONGBLOB   NOT NULL,
   expires_at  DATETIME   NOT NULL,
   KEY idx_expires (expires_at),
-  CONSTRAINT payload_hoechstens_64k CHECK (LENGTH(payload) <= 65536)
+  CONSTRAINT payload_hoechstens_16m CHECK (LENGTH(payload) <= 16500000)
 ) ENGINE=InnoDB;
 ```
 
@@ -359,9 +384,10 @@ ausgelieferte Seitenstruktur mit dem Repository vergleichen können.
 Folgt der Systemeinstellung über `prefers-color-scheme`. **Kein Umschalter** — der bräuchte
 Speicher im Browser und damit Angriffsfläche, die für Kosmetik nicht eröffnet wird.
 
-## 13. Die zwanzig Zusagen
+## 13. Die Zusagen
 
-Daran wird dieses Projekt gemessen. Jede Zusage ist entweder durch einen Test abgedeckt oder
+Daran wird dieses Projekt gemessen. Aus den ursprünglich zwanzig sind mit Passphrase,
+Anhängen und QR-Code drei weitere geworden. Jede Zusage ist entweder durch einen Test abgedeckt oder
 in `UEBERGABE.md` ausdrücklich als „noch nicht abgedeckt" markiert. Eine dritte Möglichkeit
 gibt es nicht.
 
@@ -377,8 +403,8 @@ gibt es nicht.
 | 8 | Die drei Fehlerfälle sind byteweise und zeitlich ununterscheidbar |
 | 9 | Abgelaufene Geheimnisse werden nicht ausgeliefert, auch ohne Cron |
 | 10 | Der Aufräum-Cron löscht abgelaufene Zeilen; bei abgeschaltetem Cron übernimmt das MariaDB-Event |
-| 11 | Auffüllen: Klartexte bis 252 Byte ergeben dieselbe Längenstufe; die gespeicherte Länge verrät nur die Blockstufe |
-| 12 | Grenzwerte 0, 1, Maximum, Maximum+1 verhalten sich wie festgelegt |
+| 11 | Auffüllen: Klartexte bis 249 Byte ergeben dieselbe Längenstufe; die gespeicherte Länge verrät nur die Blockstufe |
+| 12 | Grenzwerte 0, 1, Maximum, Maximum+1 verhalten sich wie festgelegt — Maximum ist 16 MB Nutzlast |
 | 13 | Umlaute, Emoji, Zeilenumbrüche, Tabulatoren, Nullbyte kommen unverändert zurück |
 | 14 | XSS-Nutzlasten erscheinen als Text und führen nichts aus |
 | 15 | Das Schema enthält exakt die vorgesehenen Spalten |
@@ -387,6 +413,9 @@ gibt es nicht.
 | 18 | Keine IP-Adresse im Klartext, weder in der Datenbank noch in einem Protokoll |
 | 19 | Fehlerhafte Eingaben erzeugen keinen Fehler 500 und keine Ausnahme |
 | 20 | Der Code enthält keines der verbotenen Muster |
+| 21 | Eine Passphrase erreicht den Server nie und steht in keiner Adresse |
+| 22 | Ein Anhang kommt Byte für Byte zurück, Name und Inhalt liegen nie im Klartext |
+| 23 | Der QR-Code enthält denselben Link und entsteht im Browser |
 
 ### Pflichttestdaten für Zusage 13
 

@@ -72,9 +72,13 @@ final class RequestTest extends TestCase
 
         // Die Anfrage hat gar kein Feld dafür. Was nicht im Programm
         // ankommt, kann auch nicht versehentlich gespeichert werden.
+        //
+        // angekuendigteGroesse ist die Content-Length, also eine Zahl. Sie
+        // wird gebraucht, um einen von PHP wegen post_max_size verworfenen
+        // Rumpf zu erkennen, und sagt über die absendende Person nichts aus.
         $felder = array_keys(get_object_vars($anfrage));
 
-        self::assertSame(['method', 'path', 'body', 'clientIp'], $felder);
+        self::assertSame(['method', 'path', 'body', 'clientIp', 'angekuendigteGroesse'], $felder);
     }
 
     public function testFehlendeAngabenErgebenBrauchbareVorgaben(): void

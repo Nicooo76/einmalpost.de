@@ -17,8 +17,25 @@ final class SecretStore
     /** random_bytes(16), gespeichert als BINARY(16). */
     public const ID_LENGTH = 16;
 
-    /** Harte Obergrenze für den payload, zusätzlich zum CHECK in der Datenbank. */
-    public const PAYLOAD_MAX_BYTES = 65536;
+    /**
+     * Harte Obergrenze für den payload, zusätzlich zum CHECK in der Datenbank.
+     *
+     * MariaDB überträgt keine Pakete über max_allowed_packet, und der steht
+     * auf 16 MiB (16.777.216 Byte). Ein größerer payload ließe sich gar
+     * nicht erst schreiben - unabhängig vom Spaltentyp. Statt diese
+     * serverweite Einstellung anzufassen, die alle Domains betrifft, bleibt
+     * die Grenze darunter.
+     */
+    public const PAYLOAD_MAX_BYTES = 16_500_000;
+
+    /**
+     * Was ein Absender höchstens hineinlegen darf: 16 MB.
+     *
+     * Dezimal, nicht binär - das ist die Einheit, in der Dateigrößen
+     * angezeigt werden. Der Rest bis zur payload-Grenze ist Platz für
+     * Versionsbyte, Salz, IV, Tag, Dateinamen und die Auffüllung.
+     */
+    public const NUTZLAST_MAX_BYTES = 16_000_000;
 
     /** Ein leerer payload ist kein Geheimnis. */
     public const PAYLOAD_MIN_BYTES = 1;

@@ -35,6 +35,13 @@ KEIN_KOMMENTAR=':[0-9]+:[[:space:]]*(//|--|#|\*|/\*)'
 # gemeldet.
 AUSNAHME_REMOTE_ADDR='src/Http/Request.php'
 
+# Sanktionierte Ausnahme: Der XML-Namensraum für SVG sieht aus wie eine
+# Adresse, ist aber eine Kennung. Kein Browser ruft ihn ab; er steht in der
+# SVG-Spezifikation und ist für createElementNS zwingend. Die Ausnahme nennt
+# genau diese eine Zeichenkette - jede andere http-Adresse, auch in derselben
+# Datei, fällt weiterhin auf.
+AUSNAHME_SVG_NS='http://www\.w3\.org/2000/svg'
+
 pruefe() {
     local muster="$1" name="$2" erlaubt="${3:-}"
     local treffer
@@ -82,7 +89,7 @@ pruefe 'AES-CBC' 'AES-CBC'
 pruefe 'AES-CTR' 'AES-CTR'
 
 # --- Externe Ressourcen ---
-pruefe 'http://'                'http://'
+pruefe 'http://'                'http://' "$AUSNAHME_SVG_NS"
 pruefe '<script[^>]+src[[:space:]]*=[[:space:]]*["'"'"']https?://' 'externes <script src>'
 pruefe 'cdn\.'                  'cdn.'
 pruefe 'googleapis'            'googleapis'
@@ -102,9 +109,11 @@ pruefe 'unknackbar' 'Werbeaussage "unknackbar"'
 pruefe 'milit(a|ä)r' 'Werbeaussage "militärisch"'
 
 echo ""
-echo "  Sanktionierte Ausnahme (bewusst erlaubt, nicht unterdrückt):"
+echo "  Sanktionierte Ausnahmen (bewusst erlaubt, nicht unterdrückt):"
 echo "    REMOTE_ADDR in $AUSNAHME_REMOTE_ADDR - die Adresse wird dort gelesen,"
 echo "    um sie an den HMAC des Rate-Limits zu geben, und nie gespeichert."
+echo "    Der SVG-Namensraum in public/assets/qr.js - eine XML-Kennung, die nie"
+echo "    abgerufen wird, und für createElementNS zwingend."
 
 echo ""
 if [ "$BEANSTANDET" -ne 0 ]; then

@@ -23,6 +23,7 @@ final class PageMeta
         public readonly bool $indexierbar = true,
         public readonly bool $mitOpenGraph = false,
         public readonly string $canonical = '',
+        public readonly string $sprache = Sprache::DEUTSCH,
     ) {
     }
 }

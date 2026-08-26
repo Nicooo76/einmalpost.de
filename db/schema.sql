@@ -16,16 +16,22 @@ SET SESSION sql_mode = 'STRICT_ALL_TABLES';
 -- verschlüsselt. Der Server kennt den Schlüssel nicht und kann diese Spalte
 -- nicht lesen.
 --
--- MEDIUMBLOB statt VARBINARY(65536): siehe CLAUDE.md, Abschnitt 5. Der
--- CHECK-Constraint hält die 64-KB-Grenze in der Datenbank fest, zusätzlich
--- zur harten Prüfung in PHP.
+-- LONGBLOB, nicht MEDIUMBLOB: Die Nutzlast darf 16 MB groß sein, und mit
+-- Versionsbyte, Salz, IV, Tag, Dateinamen und Auffüllung liegt der payload
+-- darüber. MEDIUMBLOB endet bei 16.777.215 Byte und läge damit zu knapp.
+--
+-- Nach oben begrenzt MariaDB ohnehin über max_allowed_packet (16 MiB); die
+-- Grenze hier bleibt bewusst darunter.
+--
+-- Der CHECK-Constraint hält die Grenze in der Datenbank fest, zusätzlich zur
+-- harten Prüfung in PHP.
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS secrets (
   id          BINARY(16) NOT NULL PRIMARY KEY,
-  payload     MEDIUMBLOB NOT NULL,
+  payload     LONGBLOB   NOT NULL,
   expires_at  DATETIME   NOT NULL,
   KEY idx_expires (expires_at),
-  CONSTRAINT payload_hoechstens_64k CHECK (LENGTH(payload) <= 65536)
+  CONSTRAINT payload_hoechstens_16m CHECK (LENGTH(payload) <= 16500000)
 ) ENGINE=InnoDB DEFAULT CHARSET=binary;
 
 -- --------------------------------------------------------------------------

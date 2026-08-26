@@ -1,0 +1,142 @@
+# Fortlaufende Prüfung.
+#
+# Läuft bei jedem Push und bei jedem Pull Request dieselben vier Ebenen wie
+# "make verify" auf einem Entwicklungsrechner: PHPStan, Einheitstests,
+# Integrationstests gegen eine echte MariaDB und Browsertests in drei
+# Browsern, beiden Farbschemata und einem Telefonprofil.
+#
+# Bewusst OHNE theme.css, Schriften und Bildmaterial: Die liegen nicht im
+# Repository. Geprüft wird damit genau die Fassung, die ein fremder Klon
+# bekommt - wenn dort etwas unbedienbar ist, fällt es hier auf und nicht
+# beim Nutzer.
+#
+# Es werden keine Geheimnisse gebraucht. Die Testdatenbank ist leer, der
+# Pepper ist ein fester Testwert, und beides steht offen im Makefile. Ein
+# Prüflauf, der Zugangsdaten bräuchte, wäre ein Prüflauf, den ein
+# Pull Request von außen nicht ausführen dürfte.
+
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Vier Prüfebenen
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      mariadb:
+        # 10.11 ist die Fassung auf dem Zielserver. DELETE ... RETURNING und
+        # das Verhalten des Strict-Modus sollen hier so ausfallen wie dort.
+        image: mariadb:10.11
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "yes"
+          MARIADB_DATABASE: einmalpost_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Quellcode holen
+        uses: actions/checkout@v4
+
+      - name: PHP einrichten
+        uses: shivammathur/setup-php@v2
+        with:
+          # Mindestversion des Projekts. Was hier läuft, läuft auf dem Server.
+          php-version: '8.3'
+          extensions: pdo, pdo_mysql, mbstring, json
+          # Abdeckungsmessung für die Einheitstests.
+          coverage: pcov
+          tools: composer:v2
+
+      - name: Composer-Zwischenspeicher
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ hashFiles('composer.lock') }}
+
+      - name: Entwicklungswerkzeuge installieren
+        run: composer install --no-interaction --no-progress
+
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Browsertreiber installieren
+        run: npm ci --no-audit --no-fund
+
+      - name: Browser-Zwischenspeicher
+        uses: actions/cache@v4
+        id: browser-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('package-lock.json') }}
+
+      - name: Browser installieren
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Systembibliotheken für zwischengespeicherte Browser
+        if: steps.browser-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium firefox webkit
+
+      - name: Event-Scheduler einschalten
+        # Ohne ihn läuft das MariaDB-Event nie, und der Test zu Zusage 10
+        # wird rot - zu Recht: Ein Event, das nicht läuft, ist kein zweites
+        # Aufräumnetz.
+        run: |
+          mariadb -h 127.0.0.1 -P 3306 --protocol=TCP -u root \
+            -e "SET GLOBAL event_scheduler = ON; SELECT @@event_scheduler;"
+
+      - name: Keine Gestaltung im Repository
+        # Gegenprobe zur Aufteilung: theme.css, Schriften und Bildmaterial
+        # gehören nicht hierher. Läge eines davon im Klon, wäre die Trennung
+        # zwischen Funktion und Aussehen gebrochen.
+        run: |
+          for PFAD in public/assets/theme.css public/assets/fonts public/assets/img; do
+            if [ -e "$PFAD" ]; then
+              echo "FEHLER: $PFAD liegt im Repository und sollte es nicht."
+              exit 1
+            fi
+          done
+          echo "ok - geprüft wird die Fassung ohne Gestaltung"
+
+      - name: Historie auf Zugangsdaten prüfen
+        run: make check-secrets
+
+      - name: Vier Prüfebenen
+        env:
+          TEST_HOST: 127.0.0.1
+          TEST_PORT: 3306
+          TEST_DB_USER: root
+          TEST_DB: einmalpost_test
+        run: make verify
+
+      - name: Aufzeichnungen fehlgeschlagener Browsertests sichern
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-bericht
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

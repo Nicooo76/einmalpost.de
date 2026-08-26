@@ -30,8 +30,9 @@ declare(strict_types=1);
 <section class="card state state--confirm" id="bestaetigung">
     <h1 class="state__title">HIER LIEGT EIN VERTRAULICHER TEXT</h1>
 
-    <p class="state__text">Wenn Sie auf Anzeigen drücken, wird der Text einmal dargestellt und
-    im selben Moment gelöscht. Danach gibt es keine Kopie mehr, auch nicht bei uns.</p>
+    <p class="state__text">Wenn Sie auf Anzeigen drücken, wird der Inhalt einmal
+    bereitgestellt und im selben Moment gelöscht. Danach gibt es keine Kopie mehr, auch nicht
+    bei uns.</p>
 
     <p class="notice notice--warning">Halten Sie sich bereit, den Text zu kopieren. Einen
     zweiten Versuch gibt es nicht.</p>
@@ -45,6 +46,27 @@ declare(strict_types=1);
     Chat- und Mailprogrammen können ihn deshalb nicht versehentlich verbrauchen.</p>
 </section>
 
+<section class="card state state--passphrase" id="passphraseAbfrage" hidden>
+    <h1 class="state__title">DIESER TEXT BRAUCHT EINE PASSPHRASE</h1>
+
+    <p class="state__text">Der Absender hat den Inhalt zusätzlich mit einer Passphrase
+    gesichert. Ohne sie lässt er sich nicht öffnen — auch von uns nicht.</p>
+
+    <label class="field">
+        <span class="field__label">PASSPHRASE</span>
+        <input class="field__input" type="password" id="passphraseEingabe"
+               autocomplete="off" spellcheck="false">
+    </label>
+
+    <p class="notice notice--warning"><strong>Ein Fehlversuch verbraucht den Inhalt.</strong>
+    Wir rufen ihn zum Prüfen ab, und dabei wird er gelöscht — auch wenn die Passphrase nicht
+    passt. Fragen Sie im Zweifel beim Absender nach, bevor Sie fortfahren.</p>
+
+    <p class="state__actions">
+        <button class="btn btn--primary" type="button" id="passphraseAbsenden">ÖFFNEN</button>
+    </p>
+</section>
+
 <p class="loading" id="laedt" hidden>Wird entschlüsselt …</p>
 
 <section class="card state state--revealed" id="ergebnis" hidden>
@@ -52,7 +74,16 @@ declare(strict_types=1);
 
     <pre class="code code--secret" id="inhalt"></pre>
 
-    <p class="state__actions">
+    <div class="datei" id="dateiErgebnis" hidden>
+        <p class="datei__name" id="dateiName"></p>
+        <p class="state__actions">
+            <a class="btn btn--primary" id="dateiLaden" download>HERUNTERLADEN</a>
+        </p>
+        <p class="note">Die Datei wurde in Ihrem Browser entschlüsselt. Sie wurde nie
+        unverschlüsselt übertragen.</p>
+    </div>
+
+    <p class="state__actions" id="kopierZeile">
         <button class="btn btn--primary" type="button" id="kopieren">KOPIEREN</button>
     </p>
 
@@ -93,9 +124,17 @@ declare(strict_types=1);
 </section>
 
 <section class="card state state--failed" id="fehlgeschlagen" hidden>
-    <h1 class="state__title">DER TEXT LÄSST SICH NICHT ÖFFNEN</h1>
+    <h1 class="state__title">DER INHALT LÄSST SICH NICHT ÖFFNEN</h1>
 
-    <p class="state__text">Der Schlüssel im Link passt nicht zu diesem Inhalt.</p>
+    <?php /* Zwei Ursachen, zwei Erklärungen. Bei einem Link mit Passphrase
+             ist fast immer sie das Problem und nicht der Schlüssel - eine
+             Meldung, die auf den Link zeigt, schickt den Empfänger auf die
+             falsche Fährte. */ ?>
+    <p class="state__text" id="grundSchluessel">Der Schlüssel im Link passt nicht zu diesem
+    Inhalt.</p>
+
+    <p class="state__text" id="grundPassphrase" hidden>Die Passphrase passt nicht. Prüfen Sie
+    Groß- und Kleinschreibung — und fragen Sie im Zweifel beim Absender nach.</p>
 
     <p class="notice notice--warning"><strong>Der Inhalt wurde beim Öffnen trotzdem
     gelöscht.</strong> Bitten Sie den Absender um einen neuen Link.</p>

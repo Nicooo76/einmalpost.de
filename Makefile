@@ -16,9 +16,21 @@ TEST_DB_PASS  ?=
 MARIADB       ?= mariadb
 E2E_PORT      ?= 8737
 
-MYSQL_CLIENT := $(MARIADB) --socket=$(TEST_SOCKET) -u $(TEST_DB_USER) $(if $(TEST_DB_PASS),-p$(TEST_DB_PASS),)
+## Verbindung wahlweise über Unix-Socket (lokal) oder TCP.
+##
+## Auf einem Entwicklungsrechner ist der Socket der kürzere Weg. In einer
+## fortlaufenden Prüfung läuft die Datenbank als eigener Dienst und ist nur
+## über das Netz erreichbar - dann TEST_HOST setzen.
+TEST_HOST ?=
+TEST_PORT ?= 3306
 
-EINMALPOST_TEST_DSN         := mysql:unix_socket=$(TEST_SOCKET);dbname=$(TEST_DB);charset=utf8mb4
+ifeq ($(strip $(TEST_HOST)),)
+    MYSQL_CLIENT := $(MARIADB) --socket=$(TEST_SOCKET) -u $(TEST_DB_USER) $(if $(TEST_DB_PASS),-p$(TEST_DB_PASS),)
+    EINMALPOST_TEST_DSN := mysql:unix_socket=$(TEST_SOCKET);dbname=$(TEST_DB);charset=utf8mb4
+else
+    MYSQL_CLIENT := $(MARIADB) -h $(TEST_HOST) -P $(TEST_PORT) --protocol=TCP -u $(TEST_DB_USER) $(if $(TEST_DB_PASS),-p$(TEST_DB_PASS),)
+    EINMALPOST_TEST_DSN := mysql:host=$(TEST_HOST);port=$(TEST_PORT);dbname=$(TEST_DB);charset=utf8mb4
+endif
 EINMALPOST_TEST_DB_USER     := $(TEST_DB_USER)
 EINMALPOST_TEST_DB_PASSWORD := $(TEST_DB_PASS)
 EINMALPOST_TEST_RATE_MAX    := 1000
@@ -98,7 +110,9 @@ coverage: testdb
 DEPLOY_AUSSCHLUSS := \
 	--exclude '.git' --exclude '.well-known/' \
 	--exclude 'vendor' --exclude 'node_modules' \
-	--exclude 'tests' --exclude 'tools' --exclude 'build' \
+	--exclude 'tests' --exclude 'build' \
+	--exclude 'tools/verify-live.php' --exclude 'tools/check-history.sh' \
+	--exclude 'tools/write-test-config.php' --exclude 'tools/verbotene-muster.sh' \
 	--exclude '.phpunit.cache' --exclude '.phpstan-cache' \
 	--exclude 'test-results' --exclude 'playwright-report' \
 	--exclude 'config/config.php' --exclude '.env' --exclude '.env.*' \
@@ -114,6 +128,12 @@ DEPLOY_AUSSCHLUSS := \
 -include deploy.local.mk
 
 DEPLOY_ZIEL := $(DEPLOY_HOST):$(DEPLOY_WURZEL)/
+
+## Gruppe der Webserver-Prozesse auf dem Ziel. Bei Plesk heißt sie psacln.
+DEPLOY_GRUPPE ?= psacln
+
+## PHP auf dem Zielserver. Bei Plesk liegt es nicht im PATH.
+DEPLOY_PHP ?= /opt/plesk/php/8.3/bin/php
 
 ## Spielt den aktuellen Stand auf den Server - mit --delete.
 ##
@@ -135,9 +155,17 @@ deploy: verify check-secrets
 		| grep '^\*deleting' || echo "    (nichts)"
 	@echo "==> Hochspielen nach $(DEPLOY_ZIEL)"
 	@rsync -az --delete $(DEPLOY_AUSSCHLUSS) ./ $(DEPLOY_ZIEL)
-	@ssh $(DEPLOY_HOST) 'chown -R $(DEPLOY_BENUTZER):psacln $(DEPLOY_WURZEL); \
+	@ssh $(DEPLOY_HOST) 'chown -R $(DEPLOY_BENUTZER):$(DEPLOY_GRUPPE) $(DEPLOY_WURZEL); \
 		chmod 700 $(DEPLOY_WURZEL)/config; \
 		chmod 600 $(DEPLOY_WURZEL)/config/config.php'
+	@echo "==> Steht das Schema auf dem Stand des Repositorys?"
+	@ssh $(DEPLOY_HOST) 'cd $(DEPLOY_WURZEL) && EINMALPOST_CONFIG=$$PWD/config/config.php \
+		$(DEPLOY_PHP) tools/schema-pruefen.php' || { \
+		echo ""; \
+		echo "Der Deploy hat Dateien hochgespielt, aber das Schema passt nicht dazu."; \
+		echo "Die Anwendung läuft damit auf einer Datenbank von gestern."; \
+		exit 1; \
+	}
 	@echo "    Hochgespielt. Prüfen mit: make verify-live LIVE_URL=https://einmalpost.de"
 
 ## Durchsucht die GESAMTE Historie nach Zugangsdaten, nicht nur den aktuellen

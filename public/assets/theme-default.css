@@ -150,6 +150,20 @@ h1, h2, h3 { line-height: 1.25; }
     color: #000;
 }
 
+/*
+ * Der Platzhaltertext braucht eine eigene Farbe.
+ *
+ * Ohne sie nimmt jeder Browser seine eigene: WebKit wählt ein helles Grau,
+ * das gegen Weiß unter dem Mindestwert von 4,5:1 liegt und damit nicht mehr
+ * lesbar ist. #595959 ergibt 7:1 und bleibt trotzdem erkennbar blasser als
+ * eingegebener Text - ein Platzhalter, der aussieht wie eine Eingabe, ist
+ * seinerseits verwirrend.
+ */
+.field__input::placeholder {
+    color: #595959;
+    opacity: 1;
+}
+
 .field__input--area {
     min-height: 9rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

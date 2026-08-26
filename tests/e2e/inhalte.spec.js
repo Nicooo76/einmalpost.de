@@ -44,8 +44,9 @@ test.describe('Inhalte kommen unveraendert zurueck', () => {
                 const klar = await window.einmalpost.entschluessele(zurueck, verschluesselt.schluessel);
 
                 return {
-                    gleich: klar === klartext,
-                    zurueck: klar,
+                    gleich: klar.text === klartext,
+                    zurueck: klar.text,
+                    istDatei: klar.istDatei,
                     laenge: verschluesselt.payload.length
                 };
             }, text);
@@ -53,9 +54,11 @@ test.describe('Inhalte kommen unveraendert zurueck', () => {
             expect(ergebnis.zurueck).toBe(text);
             expect(ergebnis.gleich).toBe(true);
 
-            // payload = iv(12) + ciphertext + tag(16); der Klartextblock ist
-            // ein Vielfaches von 256.
-            expect((ergebnis.laenge - 28) % 256).toBe(0);
+            expect(ergebnis.istDatei).toBe(false);
+
+            // payload = version(1) + iv(12) + ciphertext + tag(16); der
+            // Klartextblock ist ein Vielfaches von 256.
+            expect((ergebnis.laenge - 29) % 256).toBe(0);
         });
     }
 
@@ -114,12 +117,12 @@ test.describe('Inhalte kommen unveraendert zurueck', () => {
 });
 
 test.describe('Zusage 11: Auffuellen', () => {
-    test('Klartexte bis 252 Byte ergeben dieselbe Laengenstufe', async ({ page }) => {
+    test('Klartexte bis 249 Byte ergeben dieselbe Laengenstufe', async ({ page }) => {
         await page.goto('/');
 
         const laengen = await page.evaluate(async () => {
             const messen = async (anzahl) => {
-                const verschluesselt = await window.einmalpost.verschluessele('A'.repeat(anzahl));
+                const verschluesselt = await window.einmalpost.verschluessele('A'.repeat(anzahl), '');
 
                 return verschluesselt.payload.length;
             };
@@ -127,36 +130,35 @@ test.describe('Zusage 11: Auffuellen', () => {
             return {
                 eins: await messen(1),
                 fuenf: await messen(5),
-                zweihundertfuenfzig: await messen(250),
-                zweihundertzweiundfuenfzig: await messen(252),
-                zweihundertdreiundfuenfzig: await messen(253)
+                zweihundert: await messen(200),
+                zweihundertneunundvierzig: await messen(249),
+                zweihundertfuenfzig: await messen(250)
             };
         });
 
-        // 4 Byte Längenfeld plus 252 Byte Klartext füllen genau einen Block.
-        // Allem darunter ist die gespeicherte Länge nicht anzusehen - einem
-        // Kennwort so wenig wie einem halben Absatz.
-        const ersteStufe = 12 + 256 + 16;
+        // Der Klartext trägt einen Kopf: Typ, Länge des Namens und Länge des
+        // Inhalts, zusammen 7 Byte. 7 + 249 füllen genau einen Block von
+        // 256 Byte - allem darunter ist die gespeicherte Länge nicht
+        // anzusehen.
+        const ersteStufe = 1 + 12 + 256 + 16;
 
         expect(laengen.eins).toBe(ersteStufe);
         expect(laengen.fuenf).toBe(ersteStufe);
-        expect(laengen.zweihundertfuenfzig).toBe(ersteStufe);
-        expect(laengen.zweihundertzweiundfuenfzig).toBe(ersteStufe);
+        expect(laengen.zweihundert).toBe(ersteStufe);
+        expect(laengen.zweihundertneunundvierzig).toBe(ersteStufe);
 
-        // Ein Byte mehr passt nicht mehr in den Block und liegt deshalb in
-        // der nächsten Stufe. Auch das ist eine Stufe und keine verwertbare
-        // Länge.
-        expect(laengen.zweihundertdreiundfuenfzig).toBe(12 + 512 + 16);
+        // Ein Byte mehr passt nicht mehr in den Block.
+        expect(laengen.zweihundertfuenfzig).toBe(1 + 12 + 512 + 16);
     });
 
-        test('jede Laenge landet auf einer Stufe von 256 Byte', async ({ page }) => {
+    test('jede Laenge landet auf einer Stufe von 256 Byte', async ({ page }) => {
         await page.goto('/');
 
         const stufen = await page.evaluate(async () => {
             const ergebnis = [];
 
-            for (const anzahl of [1, 2, 100, 251, 252, 253, 300, 500, 508, 509, 764, 765, 1000]) {
-                const verschluesselt = await window.einmalpost.verschluessele('A'.repeat(anzahl));
+            for (const anzahl of [1, 2, 100, 248, 249, 250, 300, 500, 505, 506, 761, 762, 1000]) {
+                const verschluesselt = await window.einmalpost.verschluessele('A'.repeat(anzahl), '');
                 ergebnis.push([anzahl, verschluesselt.payload.length]);
             }
 
@@ -166,8 +168,8 @@ test.describe('Zusage 11: Auffuellen', () => {
         const gesehen = new Set();
 
         for (const [anzahl, laenge] of stufen) {
-            expect((laenge - 28) % 256, `${anzahl} Byte ergaben ${laenge} Byte payload`).toBe(0);
-            expect(laenge).toBeGreaterThanOrEqual(12 + 256 + 16);
+            expect((laenge - 29) % 256, `${anzahl} Byte ergaben ${laenge} Byte payload`).toBe(0);
+            expect(laenge).toBeGreaterThanOrEqual(1 + 12 + 256 + 16);
             gesehen.add(laenge);
         }
 
@@ -177,14 +179,14 @@ test.describe('Zusage 11: Auffuellen', () => {
 
     test('die Stufe steht auch so in der Datenbank', async ({ page }) => {
         const kurz = await erzeugeGeheimnis(page, 'A'.repeat(5));
-        const laenger = await erzeugeGeheimnis(page, 'A'.repeat(252));
-        const naechsteStufe = await erzeugeGeheimnis(page, 'A'.repeat(253));
+        const laenger = await erzeugeGeheimnis(page, 'A'.repeat(249));
+        const naechsteStufe = await erzeugeGeheimnis(page, 'A'.repeat(250));
 
-        // Gespeichert wird die Stufe, nicht die Länge: 5 und 252 Byte sind
+        // Gespeichert wird die Stufe, nicht die Länge: 5 und 249 Byte sind
         // in der Datenbank nicht auseinanderzuhalten.
-        expect(db('laenge', kurz.id)).toBe(String(12 + 256 + 16));
+        expect(db('laenge', kurz.id)).toBe(String(1 + 12 + 256 + 16));
         expect(db('laenge', kurz.id)).toBe(db('laenge', laenger.id));
-        expect(db('laenge', naechsteStufe.id)).toBe(String(12 + 512 + 16));
+        expect(db('laenge', naechsteStufe.id)).toBe(String(1 + 12 + 512 + 16));
     });
 });
 

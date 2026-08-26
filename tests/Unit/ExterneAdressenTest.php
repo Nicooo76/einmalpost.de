@@ -41,7 +41,13 @@ final class ExterneAdressenTest extends TestCase
      * geladenen Ressourcen: schema.org wird nie abgerufen, es ist eine
      * Kennung.
      */
-    private const HARMLOS = ['https://schema.org', 'https://hstspreload.org'];
+    private const HARMLOS = [
+        'https://schema.org',
+        'https://hstspreload.org',
+        // Der XML-Namensraum für SVG. Er wird nie abgerufen - er ist eine
+        // Kennung, keine Adresse. createElementNS verlangt ihn wörtlich.
+        'http://www.w3.org/2000/svg',
+    ];
 
 
     /**

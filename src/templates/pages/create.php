@@ -11,8 +11,9 @@ declare(strict_types=1);
 <section class="hero">
     <h1 class="hero__title">Passwörter und vertrauliche Daten sicher weitergeben</h1>
 
-    <p class="hero__lead">Ein Text, ein Link, ein einziger Abruf. Verschlüsselt wird in Ihrem
-    Browser — der Server bekommt den Inhalt nie zu sehen. Danach ist er weg.</p>
+    <p class="hero__lead">Ein Text oder eine Datei, ein Link, ein einziger Abruf.
+    Verschlüsselt wird in Ihrem Browser — der Server bekommt den Inhalt nie zu sehen. Danach
+    ist er weg.</p>
 
     <ul class="badges">
         <li class="badge">EINMAL LESBAR</li>
@@ -37,6 +38,24 @@ declare(strict_types=1);
                       placeholder="Passwort, Zugangsdaten, eine kurze Nachricht …"></textarea>
         </label>
 
+        <div class="field">
+            <span class="field__label">ODER EINE DATEI</span>
+            <input class="field__datei" type="file" id="datei">
+            <p class="note" id="dateiInfo" hidden></p>
+            <p class="note">Höchstens 16 MB. Die Datei wird genauso verschlüsselt wie ein
+            Text — wir sehen weder Inhalt noch Namen.</p>
+        </div>
+
+        <label class="field">
+            <span class="field__label">PASSPHRASE (FREIWILLIG)</span>
+            <input class="field__input" type="password" id="passphrase"
+                   autocomplete="new-password" spellcheck="false"
+                   placeholder="Leer lassen, wenn der Link allein genügt">
+            <p class="note">Mit Passphrase reicht der Link allein nicht mehr. Nennen Sie sie
+            über einen anderen Weg als den Link — am Telefon, persönlich. <strong>Wer sie
+            vergisst, kommt nicht mehr an den Inhalt</strong>, auch wir nicht.</p>
+        </label>
+
         <label class="field field--inline">
             <span class="field__label">GÜLTIG FÜR</span>
             <select class="field__input field__input--select" id="ttl">
@@ -58,7 +77,17 @@ declare(strict_types=1);
 
         <p class="result__actions">
             <button class="btn btn--primary" type="button" id="kopieren">KOPIEREN</button>
+            <button class="btn btn--secondary" type="button" id="qrZeigen">ALS QR-CODE</button>
         </p>
+
+        <figure class="qr" id="qrBereich" hidden>
+            <div class="qr__flaeche" id="qrFlaeche"></div>
+            <figcaption class="note">Zum Abscannen mit einem zweiten Gerät. Der Schlüssel
+            steht mit im Bild — behandeln Sie es wie den Link selbst.</figcaption>
+        </figure>
+
+        <p class="notice notice--warning" id="passphraseHinweis" hidden>Dieser Link braucht
+        zusätzlich die Passphrase. Nennen Sie sie über einen anderen Weg als den Link.</p>
 
         <p class="note">Der Link enthält den Schlüssel. Er liegt jetzt in Ihrer Zwischenablage
         und wandert von dort in Ihr Chat- oder Mailprogramm. Behandeln Sie ihn so vertraulich
@@ -176,4 +205,5 @@ declare(strict_types=1);
 </section>
 
 <script nonce="<?= $nonceAttribut ?>" src="/assets/krypto.js"></script>
+<script nonce="<?= $nonceAttribut ?>" src="/assets/qr.js"></script>
 <script nonce="<?= $nonceAttribut ?>" src="/assets/create.js"></script>

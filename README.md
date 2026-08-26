@@ -25,6 +25,7 @@ Der Prüfstein für jede Entscheidung in diesem Projekt:
 - [Prüfen](#prüfen)
 - [Betrieb](#betrieb)
 - [Gestaltung](#gestaltung)
+- [Sprachen](#sprachen)
 - [Mitwirken](#mitwirken)
 - [Lizenz](#lizenz)
 
@@ -36,14 +37,26 @@ Der Prüfstein für jede Entscheidung in diesem Projekt:
 
 1. Der Browser erzeugt einen zufälligen Schlüssel mit 256 Bit
    (`crypto.getRandomValues`).
-2. Der Klartext wird aufgefüllt: 4 Byte Länge als Big-Endian-uint32, dann die UTF-8-Bytes,
-   dann Nullbytes bis zum nächsten Vielfachen von 256 Byte, mindestens 256 Byte. **Ohne das
-   verrät die gespeicherte Länge, ob dort ein Kennwort oder ein Zertifikat liegt.**
+2. Text oder Datei werden verpackt: `typ(1) ‖ namenslaenge(2) ‖ name ‖ laenge(4) ‖ inhalt`,
+   dann mit Nullbytes bis zum nächsten Vielfachen von 256 Byte aufgefüllt. **Ohne das verrät
+   die gespeicherte Länge, ob dort ein Kennwort oder ein Zertifikat liegt.**
 3. Verschlüsselt wird mit **AES-256-GCM** über `crypto.subtle`. GCM erkennt nachträgliche
    Veränderungen: Ein einziges gekipptes Bit lässt die Entschlüsselung fehlschlagen, statt
    Unsinn zu liefern.
-4. Gesendet wird `payload = iv(12) ‖ ciphertext ‖ tag(16)`. Der Schlüssel wird an den Link
-   gehängt, hinter das `#`.
+4. Gesendet wird `payload = version(1) ‖ [salz(16)] ‖ iv(12) ‖ ciphertext ‖ tag(16)`. Der
+   Schlüssel wird an den Link gehängt, hinter das `#`.
+
+**Anhänge** gehen denselben Weg wie Texte, bis 16 MB. Der Server sieht weder Inhalt noch
+Dateinamen.
+
+**Passphrase** (freiwillig): Ist eine gesetzt, wird der tatsächliche Schlüssel aus beidem
+abgeleitet — `zufall(32) XOR PBKDF2-SHA256(passphrase, salz, 600.000 Runden)`. Im Link steht
+weiterhin nur der Zufallsanteil, gekennzeichnet durch `p.` im Fragment. Wer den Link abfängt,
+hat ohne die Passphrase nichts. Gefragt wird **vor** dem Abruf: Danach wäre der Inhalt bei
+einem Tippfehler verbraucht.
+
+**QR-Code**: im Browser erzeugt, ohne fremde Bibliothek (`public/assets/qr.js`, Byte-Modus,
+Fehlerkorrektur M). Ein Dienst, der ihn erzeugte, bekäme den Link samt Schlüssel zu sehen.
 
 ### Auf dem Server
 
@@ -54,12 +67,15 @@ Browserkennzeichen, kein Aufrufzähler.**
 ```sql
 CREATE TABLE secrets (
   id          BINARY(16) NOT NULL PRIMARY KEY,
-  payload     MEDIUMBLOB NOT NULL,
+  payload     LONGBLOB   NOT NULL,
   expires_at  DATETIME   NOT NULL,
   KEY idx_expires (expires_at),
-  CONSTRAINT payload_hoechstens_64k CHECK (LENGTH(payload) <= 65536)
+  CONSTRAINT payload_hoechstens_16m CHECK (LENGTH(payload) <= 16500000)
 ) ENGINE=InnoDB;
 ```
+
+Die Grenze bleibt bewusst unter MariaDBs `max_allowed_packet` von 16 MiB — ein größerer
+payload ließe sich gar nicht erst schreiben.
 
 ### Beim Abrufen
 
@@ -191,6 +207,10 @@ npm install && npx playwright install   # Chromium, Firefox, WebKit
 make verify
 ```
 
+Bei jedem Push und jedem Pull Request läuft derselbe Lauf auf GitHub
+(`.github/workflows/verify.yml`) — bewusst **ohne** `theme.css` und Schriften, also gegen
+genau die Fassung, die ein fremder Klon bekommt.
+
 `make verify` führt der Reihe nach aus und bricht beim **ersten** Fehlschlag ab:
 
 | Stufe | Umfang |
@@ -269,6 +289,45 @@ Webserver-Ebene. Setzen es beide, kommt die Kopfzeile doppelt an, und nach RFC 6
 verarbeitet ein Browser nur die zuerst gesendete. Der Fehler wäre unsichtbar wirksam.
 `make verify-live` prüft deshalb, dass sie **genau einmal** ankommt.
 
+### Schemaänderungen
+
+**Ein Deploy spielt Dateien hoch, aber ändert keine Tabellen.** Das ist Absicht — eine
+automatische Migration bei jedem Hochspielen ist genau dann gefährlich, wenn man sie am
+wenigsten erwartet.
+
+Migrationen liegen in `db/migrationen/` und werden von Hand eingespielt:
+
+```bash
+( echo "USE <datenbank>;"; cat db/migrationen/001-anhaenge-bis-16-mb.sql ) | plesk db
+```
+
+Sie sind so geschrieben, dass ein zweiter Lauf nichts kaputtmacht.
+
+`make deploy` prüft anschließend, ob das Schema zum hochgespielten Stand passt, und bricht
+ab, wenn nicht. Der Anlass ist ein echter Fehler: Nach der Umstellung auf Anhänge stand in
+der Produktion noch die alte Spalte, und der erste große Anhang scheiterte mit einem
+Serverfehler — den niemand sah, weil er auch nirgends protokolliert wurde.
+
+Einzeln prüfen lässt sich das mit:
+
+```bash
+php tools/schema-pruefen.php
+```
+
+### PHP-Grenzen
+
+Ein Anhang von 16 MB wird als base64url im JSON-Rumpf rund 22 MB groß. `post_max_size` muss
+entsprechend hoch stehen — **und zwar in der FPM-Pool-Konfiguration, nicht in einer
+`.user.ini`**: PHP liest die `.user.ini` erst, wenn der Rumpf bereits verworfen wurde.
+
+Bei Plesk:
+
+```bash
+printf 'post_max_size = 32M\nmemory_limit = 256M\nmax_execution_time = 120\n' > /tmp/php.ini
+plesk bin site --update-php-settings <domain> -settings /tmp/php.ini
+systemctl reload plesk-php83-fpm
+```
+
 ### Aufräumen
 
 Zwei voneinander unabhängige Netze — ein Cron und das MariaDB-Event aus `db/event.sql`:
@@ -320,6 +379,21 @@ Die mitgelieferte Fassung verwendet **Barlow** und **Barlow Condensed** unter de
 vom eigenen Server ausgeliefert. Kein Google Fonts, keine fremde Anfrage.
 
 ---
+
+## Sprachen
+
+Deutsch unter `/`, Englisch unter `/en/`. Kein automatischer Sprachwechsel nach
+Browsereinstellung: Wer einen Link bekommt, soll die Seite sehen, auf die der Link zeigt.
+
+Auf `/s/*` gibt es **keinen** Sprachumschalter. Ein gewöhnlicher Link würde das Fragment
+verlieren — und damit den Schlüssel.
+
+Impressum und Datenschutz gibt es nur auf Deutsch: Sie gelten nach deutschem Recht, und eine
+Übersetzung wäre eine unverbindliche Zweitfassung. Der englische Fußbereich verweist auf sie
+und kennzeichnet das.
+
+Beide Fassungen tragen **dieselben Kennungen** in derselben Struktur — die Skripte sind
+geteilt, und ein Test vergleicht die `id`-Listen beider Seiten.
 
 ## Mitwirken
 

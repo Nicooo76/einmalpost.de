@@ -11,13 +11,18 @@
     // genau 43 Zeichen.
     var SCHLUESSEL_ZEICHEN = 43;
 
+    // Vorangestellt, wenn zusätzlich eine Passphrase nötig ist. Steht im
+    // Fragment und erreicht den Server nie - die Anzeigeseite weiß dadurch
+    // vor dem Abruf, dass sie fragen muss.
+    var PASSPHRASE_MARKE = 'p.';
+
     // Erst nach dieser Zeit wird "Wird entschlüsselt …" eingeblendet. Sonst
     // blitzt der Hinweis nur auf.
     var LADEHINWEIS_AB_MS = 300;
 
     var abschnitte = [
-        'bestaetigung', 'ergebnis', 'nurKopiertFertig', 'unvollstaendig',
-        'fehlgeschlagen', 'fortgeschrieben', 'zuVieleAnfragen'
+        'bestaetigung', 'passphraseAbfrage', 'ergebnis', 'nurKopiertFertig',
+        'unvollstaendig', 'fehlgeschlagen', 'fortgeschrieben', 'zuVieleAnfragen'
     ];
 
     var laedt = document.getElementById('laedt');
@@ -25,6 +30,14 @@
     var statuszeile = document.getElementById('statuszeile');
     var fehlerFeld = document.getElementById('fehler');
     var kopieren = document.getElementById('kopieren');
+    var kopierZeile = document.getElementById('kopierZeile');
+    var dateiErgebnis = document.getElementById('dateiErgebnis');
+    var dateiName = document.getElementById('dateiName');
+    var dateiLaden = document.getElementById('dateiLaden');
+    var passphraseEingabe = document.getElementById('passphraseEingabe');
+
+    // Merkt sich, was nach der Passphrase-Eingabe geschehen soll.
+    var offenerWunsch = null;
 
     function zeige(name) {
         for (var i = 0; i < abschnitte.length; i++) {
@@ -44,30 +57,41 @@
         return teile[teile.length - 1] || '';
     }
 
-    function schluesselAusFragment() {
+    function fragmentInhalt() {
         // Das Fragment wird nie an den Server gesendet.
         return window.location.hash.replace(/^#/, '');
+    }
+
+    function brauchtPassphrase() {
+        return fragmentInhalt().indexOf(PASSPHRASE_MARKE) === 0;
+    }
+
+    function schluesselAusFragment() {
+        var roh = fragmentInhalt();
+
+        return brauchtPassphrase() ? roh.slice(PASSPHRASE_MARKE.length) : roh;
     }
 
     /**
      * Ist der Schlüssel überhaupt vollständig?
      *
      * Diese Prüfung entscheidet mehr, als sie aussieht: Chat- und
-     * Mailprogramme kürzen lange Adressen beim Anzeigen. Die ID im Pfad ist
-     * dann meist noch vollständig, der Schlüssel dahinter nicht. Wer trotzdem
-     * abruft, löscht den Inhalt auf dem Server - und kann ihn danach nicht
-     * entschlüsseln. Das Geheimnis wäre vernichtet, ohne dass es jemand
-     * gelesen hat.
+     * Mailprogramme kürzen lange Adressen beim Anzeigen. Die Kennung im Pfad
+     * ist dann meist noch vollständig, der Schlüssel dahinter nicht. Wer
+     * trotzdem abruft, löscht den Inhalt auf dem Server - und kann ihn
+     * danach nicht entschlüsseln. Das Geheimnis wäre vernichtet, ohne dass
+     * es jemand gelesen hat.
      */
     function schluesselIstVollstaendig(text) {
         return new RegExp('^[A-Za-z0-9_-]{' + SCHLUESSEL_ZEICHEN + '}$').test(text);
     }
 
     /**
-     * Holt das Geheimnis und entschlüsselt es. Gibt den Klartext zurück oder
-     * null, wenn ein Zustand bereits angezeigt wurde.
+     * Holt das Geheimnis und entschlüsselt es.
+     *
+     * @return {Promise<object|null>} null, wenn bereits ein Zustand steht.
      */
-    async function holeUndEntschluessele() {
+    async function holeUndEntschluessele(passphrase) {
         var schluesselText = schluesselAusFragment();
 
         // Vor dem Abruf, nicht danach.
@@ -107,11 +131,16 @@
             var payload = einmalpost.ausBase64Url(daten.payload);
             var schluessel = einmalpost.ausBase64Url(schluesselText);
 
-            return await einmalpost.entschluessele(payload, schluessel);
+            return await einmalpost.entschluessele(payload, schluessel, passphrase);
         } catch (fehler) {
             // Ab hier ist das Geheimnis auf dem Server bereits gelöscht -
             // der Abruf hat es verbraucht, auch wenn das Entschlüsseln
             // scheitert. Das sagt der Zustand auch deutlich.
+            var wegenPassphrase = brauchtPassphrase();
+
+            document.getElementById('grundSchluessel').hidden = wegenPassphrase;
+            document.getElementById('grundPassphrase').hidden = !wegenPassphrase;
+
             zeige('fehlgeschlagen');
 
             return null;
@@ -121,40 +150,123 @@
         }
     }
 
-    document.getElementById('anzeigen').addEventListener('click', async function () {
-        var klartext = await holeUndEntschluessele();
+    /**
+     * Stellt das Ergebnis dar - Text im <pre>, Datei als Ladeknopf.
+     */
+    function stelleDar(ergebnis) {
+        if (ergebnis.istDatei) {
+            var blob = new Blob([ergebnis.bytes], { type: 'application/octet-stream' });
 
-        if (klartext === null) {
+            dateiName.textContent = ergebnis.name || 'datei';
+            dateiLaden.href = URL.createObjectURL(blob);
+            dateiLaden.download = ergebnis.name || 'datei';
+            dateiErgebnis.hidden = false;
+            inhalt.hidden = true;
+            kopierZeile.hidden = true;
+        } else {
+            // textContent in ein <pre>, nie innerHTML. Eine XSS-Nutzlast im
+            // Geheimnis erscheint dadurch als Text und führt nichts aus.
+            inhalt.textContent = ergebnis.text;
+            inhalt.hidden = false;
+            dateiErgebnis.hidden = true;
+            kopierZeile.hidden = false;
+        }
+
+        zeige('ergebnis');
+    }
+
+    /**
+     * Führt einen Wunsch aus - entweder sofort oder nach der Passphrase.
+     */
+    async function fuehreAus(wunsch, passphrase) {
+        var ergebnis = await holeUndEntschluessele(passphrase);
+
+        if (ergebnis === null) {
             return;
         }
 
-        // textContent in ein <pre>, nie innerHTML. Eine XSS-Nutzlast im
-        // Geheimnis erscheint dadurch als Text und führt nichts aus.
-        inhalt.textContent = klartext;
-        zeige('ergebnis');
-    });
+        if (wunsch === 'anzeigen') {
+            stelleDar(ergebnis);
 
-    document.getElementById('nurKopieren').addEventListener('click', async function () {
-        var klartext = await holeUndEntschluessele();
+            return;
+        }
 
-        if (klartext === null) {
+        // Kopieren, ohne anzuzeigen.
+        if (ergebnis.istDatei) {
+            // Eine Datei lässt sich nicht in die Zwischenablage legen.
+            stelleDar(ergebnis);
+            zeigeFehler('Das ist eine Datei — sie wird zum Herunterladen angeboten.');
+
             return;
         }
 
         try {
-            await navigator.clipboard.writeText(klartext);
+            await navigator.clipboard.writeText(ergebnis.text);
             zeige('nurKopiertFertig');
         } catch (fehler) {
             // Die Zwischenablage war nicht erreichbar. Der Text darf jetzt
             // nicht verlorengehen - er ist auf dem Server schon gelöscht.
             // Also doch anzeigen, und sagen warum.
-            inhalt.textContent = klartext;
             statuszeile.textContent = 'ANGEZEIGT UND GELÖSCHT';
-            zeige('ergebnis');
+            stelleDar(ergebnis);
             zeigeFehler(
                 'Das Kopieren war nicht möglich, deshalb wird der Text angezeigt. '
                 + 'Er wäre sonst verloren gewesen.'
             );
+        }
+    }
+
+    /**
+     * Nimmt einen Wunsch entgegen und fragt vorher nach der Passphrase,
+     * falls der Link eine verlangt.
+     */
+    async function starte(wunsch) {
+        fehlerFeld.hidden = true;
+
+        if (!schluesselIstVollstaendig(schluesselAusFragment())) {
+            zeige('unvollstaendig');
+
+            return;
+        }
+
+        if (brauchtPassphrase()) {
+            // Fragen, bevor abgerufen wird. Ein Abruf verbraucht das
+            // Geheimnis, auch wenn die Passphrase danach nicht passt.
+            offenerWunsch = wunsch;
+            zeige('passphraseAbfrage');
+            passphraseEingabe.focus();
+
+            return;
+        }
+
+        await fuehreAus(wunsch, '');
+    }
+
+    document.getElementById('anzeigen').addEventListener('click', function () {
+        starte('anzeigen');
+    });
+
+    document.getElementById('nurKopieren').addEventListener('click', function () {
+        starte('kopieren');
+    });
+
+    document.getElementById('passphraseAbsenden').addEventListener('click', async function () {
+        var passphrase = passphraseEingabe.value;
+
+        if (passphrase === '') {
+            zeigeFehler('Bitte geben Sie die Passphrase ein.');
+
+            return;
+        }
+
+        passphraseEingabe.value = '';
+        await fuehreAus(offenerWunsch || 'anzeigen', passphrase);
+    });
+
+    passphraseEingabe.addEventListener('keydown', function (ereignis) {
+        if (ereignis.key === 'Enter') {
+            ereignis.preventDefault();
+            document.getElementById('passphraseAbsenden').click();
         }
     });
 

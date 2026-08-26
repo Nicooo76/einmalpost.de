@@ -50,9 +50,22 @@ try {
 
     $anfrage = Request::fromGlobals($_SERVER, (string) file_get_contents('php://input'));
     $antwort = $anwendung->router->dispatch($anfrage);
-} catch (Throwable) {
-    // Kein Detail nach außen. Was schiefging, steht im Fehlerprotokoll des
-    // Servers, nicht in der Antwort.
+} catch (Throwable $fehler) {
+    // Kein Detail nach außen - aber sehr wohl eines nach innen. Ein Fehler,
+    // der nirgends steht, ist nicht zu finden: Genau das ist beim ersten
+    // großen Anhang passiert.
+    //
+    // Protokolliert werden Klasse, Meldung und Ort. Keine Nutzdaten: Die
+    // Meldung einer Ausnahme kann eine Eingabe enthalten, deshalb wird sie
+    // auf eine Länge gekürzt, in die kein Geheimnis passt.
+    error_log(sprintf(
+        'einmalpost: %s in %s:%d - %s',
+        $fehler::class,
+        basename($fehler->getFile()),
+        $fehler->getLine(),
+        substr($fehler->getMessage(), 0, 200)
+    ));
+
     $antwort = new Response(
         500,
         '{"fehler":"serverfehler"}',

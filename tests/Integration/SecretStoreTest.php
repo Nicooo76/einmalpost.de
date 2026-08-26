@@ -124,6 +124,53 @@ final class SecretStoreTest extends IntegrationTestCase
         self::assertSame($payload, $this->store()->consume(Base64Url::encode($id)));
     }
 
+    /**
+     * Die Grenze bleibt unter max_allowed_packet.
+     *
+     * MariaDB überträgt keine größeren Pakete, unabhängig vom Spaltentyp.
+     * Läge die Grenze darüber, ließe sich ein erlaubter payload nicht
+     * speichern - und der Fehler träte erst beim größten Anhang auf, den
+     * jemand je schickt.
+     */
+    public function testDieGrenzeBleibtUnterDemPaketlimit(): void
+    {
+        $limit = (int) $this->query('SELECT @@max_allowed_packet')->fetchColumn();
+
+        self::assertGreaterThan(
+            SecretStore::PAYLOAD_MAX_BYTES,
+            $limit,
+            'max_allowed_packet ist kleiner als die erlaubte payload-Größe.'
+        );
+    }
+
+    /**
+     * Was ein Absender hineinlegen darf, muss mit Kopf und Auffüllung noch
+     * in die payload-Grenze passen.
+     */
+    public function testDieNutzlastPasstMitAllemDrumHerumInDieGrenze(): void
+    {
+        // Kopf des Klartexts: Typ, Länge des Namens, Name, Länge des Inhalts.
+        // Großzügig gerechnet mit einem Namen von 255 Byte.
+        $kopf = 1 + 2 + 255 + 4;
+        $gepackt = SecretStore::NUTZLAST_MAX_BYTES + $kopf;
+        $gefuellt = (int) (ceil($gepackt / 256) * 256);
+
+        // payload = Version(1) + Salz(16) + IV(12) + Schlüsseltext + Tag(16)
+        $payload = 1 + 16 + 12 + $gefuellt + 16;
+
+        self::assertLessThanOrEqual(
+            SecretStore::PAYLOAD_MAX_BYTES,
+            $payload,
+            sprintf(
+                'Eine Nutzlast von %d Byte ergibt einen payload von %d Byte und passt damit '
+                . 'nicht in die Grenze von %d.',
+                SecretStore::NUTZLAST_MAX_BYTES,
+                $payload,
+                SecretStore::PAYLOAD_MAX_BYTES
+            )
+        );
+    }
+
     public function testPayloadEinByteUeberDemMaximumWirdAbgelehnt(): void
     {
         $this->expectException(ValidationError::class);
@@ -230,17 +277,39 @@ final class SecretStoreTest extends IntegrationTestCase
         self::assertStringContainsString('STRICT_ALL_TABLES', $modus);
     }
 
-    public function testZuLangerPayloadWirdAbgelehntStattStillGekuerzt(): void
+    public function testZuLangerWertWirdAbgelehntStattStillGekuerzt(): void
     {
-        // Am SecretStore vorbei, direkt in die Datenbank: Ohne Strict-Modus
-        // würde MariaDB hier kürzen und Erfolg melden - ein zerstörtes
-        // Geheimnis, das erst beim Empfänger auffällt.
+        // Am Code vorbei, direkt in die Datenbank: Ohne Strict-Modus würde
+        // MariaDB hier kürzen und Erfolg melden - ein zerstörter Wert, der
+        // erst später auffällt.
+        //
+        // Geprüft an ip_hmac (BINARY(32)) statt an payload: Die
+        // payload-Spalte ist ein LONGBLOB und endet erst bei vier Gigabyte;
+        // dort ließe sich die Eigenschaft nur mit einem absurd großen Wert
+        // zeigen. Die Einstellung gilt für die ganze Verbindung, nicht für
+        // einzelne Spalten.
+        $anweisung = $this->pdo()->prepare(
+            'INSERT INTO rate_limits (ip_hmac, hits, expires_at) '
+            . 'VALUES (?, 1, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 3600 SECOND))'
+        );
+        $anweisung->bindValue(1, str_repeat('x', 64), PDO::PARAM_LOB);
+
+        $this->expectException(PDOException::class);
+        $anweisung->execute();
+    }
+
+    /**
+     * Und die payload-Grenze hält die Datenbank ebenfalls ein - über den
+     * CHECK-Constraint, nicht über die Spaltenbreite.
+     */
+    public function testUeberDerGrenzeLehntDieDatenbankAb(): void
+    {
         $anweisung = $this->pdo()->prepare(
             'INSERT INTO secrets (id, payload, expires_at) '
             . 'VALUES (?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 3600 SECOND))'
         );
         $anweisung->bindValue(1, random_bytes(16), PDO::PARAM_LOB);
-        $anweisung->bindValue(2, str_repeat('x', 70000), PDO::PARAM_LOB);
+        $anweisung->bindValue(2, str_repeat('x', SecretStore::PAYLOAD_MAX_BYTES + 1), PDO::PARAM_LOB);
 
         $this->expectException(PDOException::class);
         $anweisung->execute();

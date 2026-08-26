@@ -4,10 +4,9 @@
 import { test, expect } from '@playwright/test';
 import { zeigeAn } from './helfer.js';
 
-// Größter Klartext, der noch in die 64-KB-Grenze passt:
-// 4 Byte Längenfeld + Klartext, aufgefüllt auf 255 Blöcke à 256 Byte,
-// dazu 12 Byte IV und 16 Byte Tag ergibt 65308 Byte payload.
-const GROESSTER_KLARTEXT = 255 * 256 - 4;
+// Was ein Absender höchstens hineinlegen darf. Muss zu
+// SecretStore::NUTZLAST_MAX_BYTES passen.
+const NUTZLAST_MAX = 16000000;
 
 test.describe('Grenzwerte', () => {
     test('0 Zeichen: der Browser sendet gar nicht erst', async ({ page }) => {
@@ -35,31 +34,50 @@ test.describe('Grenzwerte', () => {
         expect(anzeige.inhalt).toBe('x');
     });
 
-    test('genau das Maximum: geht durch', async ({ page }) => {
+    /**
+     * Ein Text knapp unter der Grenze.
+     *
+     * Bewusst nicht die vollen 16 MB: Der Browser müsste sie erst erzeugen,
+     * dann verschlüsseln, dann als base64 übertragen - das dauert Minuten
+     * und prüft nichts, was eine Million Zeichen nicht auch prüfen. Die
+     * Grenze selbst wird dort geprüft, wo sie durchgesetzt wird:
+     * tests/Integration/SecretStoreTest.php.
+     */
+    test('ein Text von einer Million Zeichen geht durch', async ({ page }) => {
         await page.goto('/');
-        await page.evaluate((anzahl) => {
-            document.getElementById('geheimnis').value = 'A'.repeat(anzahl);
-        }, GROESSTER_KLARTEXT);
+        await page.evaluate(() => {
+            document.getElementById('geheimnis').value = 'A'.repeat(1000000);
+        });
 
         await page.click('#absenden');
-        await page.waitForSelector('#ergebnis:not([hidden])', { timeout: 30000 });
+        await page.waitForSelector('#ergebnis:not([hidden])', { timeout: 60000 });
 
         const adresse = new URL(await page.textContent('#link'));
         const anzeige = await zeigeAn(page, adresse.pathname + adresse.hash);
 
-        expect(anzeige.inhalt).toHaveLength(GROESSTER_KLARTEXT);
+        expect(anzeige.inhalt).toHaveLength(1000000);
     });
 
-    test('ein Zeichen über dem Maximum: der Server lehnt ab', async ({ page }) => {
+    test('eine zu große Datei wird vor dem Senden abgelehnt', async ({ page }) => {
         await page.goto('/');
-        await page.evaluate((anzahl) => {
-            document.getElementById('geheimnis').value = 'A'.repeat(anzahl);
-        }, GROESSTER_KLARTEXT + 1);
 
-        await page.click('#absenden');
+        const anfragen = [];
+        page.on('request', (a) => a.method() === 'POST' && anfragen.push(a.url()));
+
+        // Eine Datei knapp über der Grenze, im Browser erzeugt.
+        await page.evaluate((max) => {
+            const daten = new Uint8Array(max + 1024);
+            const datei = new File([daten], 'zu-gross.bin', { type: 'application/octet-stream' });
+            const behaelter = new DataTransfer();
+            behaelter.items.add(datei);
+            document.getElementById('datei').files = behaelter.files;
+            document.getElementById('datei').dispatchEvent(new Event('change'));
+        }, NUTZLAST_MAX);
+
         await page.waitForSelector('#fehler:not([hidden])', { timeout: 30000 });
 
-        expect(await page.textContent('#fehler')).toContain('nicht angenommen');
+        expect(await page.textContent('#fehler')).toContain('Möglich sind');
+        expect(anfragen, 'Es wurde trotzdem gesendet').toHaveLength(0);
     });
 });
 

@@ -144,13 +144,67 @@ final class VerboteneMusterTest extends TestCase
         self::assertSame(3, substr_count(Quelltext::ohneKommentare("// a\n// b\nvar x;\n", 'js'), "\n"));
     }
 
+    /**
+     * Der Shell-Prüfer lässt den XML-Namensraum für SVG durch. Diese Ausnahme
+     * ist berechtigt - ein Namensraum ist eine Kennung, keine Adresse, und
+     * wird nie abgerufen. Sie darf aber kein Scheunentor werden.
+     *
+     * Geprüft wird deshalb an einer echten Datei im ausgelieferten Ordner,
+     * nicht an einer nachgebauten: Eine wirkliche http-Adresse muss dort
+     * weiterhin auffallen, auch wenn der Namensraum daneben steht.
+     */
+    public function testDieAusnahmeFuerDenSvgNamensraumBleibtEng(): void
+    {
+        $wurzel = dirname(__DIR__, 2);
+        $probe  = $wurzel . '/public/assets/.pruefprobe.js';
+
+        $laufen = static function () use ($wurzel): int {
+            exec(sprintf('cd %s && bash tools/verbotene-muster.sh 2>&1', escapeshellarg($wurzel)), $_, $stand);
+
+            return $stand;
+        };
+
+        self::assertSame(0, $laufen(), 'Der Prüfer beanstandet schon den unveränderten Stand.');
+
+        try {
+            // Der Namensraum allein: erlaubt.
+            file_put_contents($probe, "var NS = 'http://www.w3.org/2000/svg';\n");
+            self::assertSame(0, $laufen(), 'Der SVG-Namensraum sollte durchgehen.');
+
+            // Eine echte Adresse daneben: muss auffallen.
+            file_put_contents(
+                $probe,
+                "var NS = 'http://www.w3.org/2000/svg';\nvar weg = 'http://beispiel.test/sammeln';\n"
+            );
+            self::assertSame(
+                1,
+                $laufen(),
+                'Eine echte http-Adresse muss auffallen, auch neben dem Namensraum.'
+            );
+
+            // Und auch eine, die dem Namensraum ähnelt.
+            file_put_contents($probe, "var x = 'http://www.w3.org.beispiel.test/2000/svg';\n");
+            self::assertSame(1, $laufen(), 'Eine nachgeahmte Adresse darf nicht durchrutschen.');
+        } finally {
+            @unlink($probe);
+        }
+
+        self::assertFileDoesNotExist($probe);
+        self::assertSame(0, $laufen(), 'Nach dem Aufräumen muss der Prüfer wieder schweigen.');
+    }
+
     public function testDerKlartextWirdNurUeberTextContentGesetzt(): void
     {
         $roh    = (string) file_get_contents(dirname(__DIR__, 2) . '/public/assets/reveal.js');
         $code   = Quelltext::ohneKommentare($roh, 'js');
 
-        self::assertStringContainsString('inhalt.textContent = klartext;', $code);
+        // Der Klartext geht ausschließlich über textContent in das <pre>.
+        self::assertStringContainsString('inhalt.textContent = ergebnis.text;', $code);
         self::assertStringNotContainsString('innerHTML', $code);
+
+        // Und der Dateiname ebenfalls - er kommt aus demselben
+        // entschlüsselten Block und ist genauso wenig vertrauenswürdig.
+        self::assertStringContainsString('dateiName.textContent =', $code);
     }
 
     public function testDasFrontendHatKeineLaufzeitabhaengigkeiten(): void
@@ -203,7 +257,14 @@ final class VerboteneMusterTest extends TestCase
      */
     public function testDieSchmuckloseFassungBleibtSchmucklos(): void
     {
-        $erlaubteFarben = ['#000', '#fff', '#000000', '#ffffff'];
+        $erlaubteFarben = [
+            '#000', '#fff', '#000000', '#ffffff',
+            // Der Platzhaltertext im Eingabefeld. Ohne eigene Angabe wählt
+            // jeder Browser seine eigene Farbe, und WebKits Standardgrau
+            // liegt unter dem Mindestkontrast. 7:1 gegen Weiß, und noch
+            // erkennbar blasser als eingegebener Text.
+            '#595959',
+        ];
 
         foreach ([dirname(__DIR__, 2) . '/public/assets/theme-default.css'] as $datei) {
             $inhalt = (string) file_get_contents($datei);

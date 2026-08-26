@@ -47,7 +47,7 @@ final class SchemaTest extends IntegrationTestCase
         $spalten = $this->spalten('secrets');
 
         self::assertSame('binary(16)', $spalten['id']['COLUMN_TYPE']);
-        self::assertSame('mediumblob', $spalten['payload']['COLUMN_TYPE']);
+        self::assertSame('longblob', $spalten['payload']['COLUMN_TYPE']);
         self::assertSame('datetime', $spalten['expires_at']['COLUMN_TYPE']);
 
         foreach (['id', 'payload', 'expires_at'] as $name) {
@@ -103,12 +103,16 @@ final class SchemaTest extends IntegrationTestCase
     {
         $klausel = $this->query(
                 'SELECT CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS '
-                . "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'payload_hoechstens_64k'"
+                . "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'payload_hoechstens_16m'"
             )
             ->fetchColumn();
 
-        self::assertIsString($klausel, 'Der CHECK-Constraint auf die 64-KB-Grenze fehlt.');
-        self::assertStringContainsString('65536', $klausel);
+        self::assertIsString($klausel, 'Der CHECK-Constraint auf die Größengrenze fehlt.');
+        self::assertStringContainsString(
+            (string) \Einmalpost\SecretStore::PAYLOAD_MAX_BYTES,
+            $klausel,
+            'Der CHECK in der Datenbank nennt eine andere Grenze als der Code.'
+        );
     }
 
     public function testBeideTabellenLaufenAufInnoDb(): void

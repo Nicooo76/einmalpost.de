@@ -57,7 +57,11 @@ export default defineConfig({
         // PHP_CLI_SERVER_WORKERS: Ohne mehrere Arbeitsprozesse kann der eingebaute
         // Server gleichzeitige Anfragen nicht wirklich gleichzeitig bearbeiten -
         // und genau das muss für die Prüfung des atomaren Verbrauchs möglich sein.
-        command: `PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:${PORT} -t public public/index.php`,
+        // Die Grenzen müssen zu denen der Produktion passen, sonst schlägt
+        // ein 16-MB-Anhang hier durch und dort fehl. -d wirkt nur auf diesen
+        // Prozess, nicht auf die php.ini des Rechners.
+        command: `PHP_CLI_SERVER_WORKERS=8 php -d post_max_size=32M -d memory_limit=256M `
+            + `-S 127.0.0.1:${PORT} -t public public/index.php`,
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         stdout: 'pipe',

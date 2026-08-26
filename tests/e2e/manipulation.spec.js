@@ -28,6 +28,8 @@ test.describe('Manipulation', () => {
         expect(anzeige.inhalt).toBeNull();
         expect(anzeige.zustand).toBe('fehlgeschlagen');
         expect(anzeige.text).toContain('trotzdem gelöscht');
+        // Ohne Passphrase im Link ist der Schlüssel die richtige Erklärung.
+        expect(anzeige.text).toContain('Der Schlüssel im Link passt nicht');
 
         // Nirgends auf der Seite darf ein Bruchstück des Klartexts stehen.
         const seite = await page.content();
