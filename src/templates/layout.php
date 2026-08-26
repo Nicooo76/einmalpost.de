@@ -64,7 +64,16 @@ $englischerWeg = $fassungen['en'];
 <link rel="alternate" hreflang="en" href="<?= $h($englischerWeg) ?>">
 <link rel="alternate" hreflang="x-default" href="<?= $h($deutscherWeg) ?>">
 <link rel="stylesheet" href="/assets/theme-default.css">
+<?php /*
+ * Das Aussehen liegt nicht im Repository. Fehlt es, wird es auch nicht
+ * angefordert: Ein Verweis auf eine Datei, die es in einem Klon nie geben
+ * wird, erzeugt bei jedem Aufruf einen 404 - in der Konsole jedes Besuchers
+ * und in jedem Protokoll. Ohne theme.css bleibt die Seite schmucklos, aber
+ * vollständig bedienbar; das stellt theme-default.css darüber sicher.
+ */ ?>
+<?php if (is_file(dirname(__DIR__, 2) . '/public/assets/theme.css')): ?>
 <link rel="stylesheet" href="/assets/theme.css">
+<?php endif; ?>
 <?= $kopfExtra ?>
 </head>
 <body class="page <?= $h($meta->bodyClass) ?>" data-sprache="<?= $h($meta->sprache) ?>">

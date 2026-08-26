@@ -46,7 +46,7 @@ export EINMALPOST_TEST_RATE_PEPPER
 export EINMALPOST_CONFIG
 export E2E_PORT
 
-.PHONY: verify verify-live deploy check-secrets stan unit integration e2e coverage testdb testconfig clean help
+.PHONY: funktionsprobe verify verify-live deploy check-secrets stan unit integration e2e coverage testdb testconfig clean help
 
 help:
 	@echo "verify       - Alles der Reihe nach, Abbruch beim ersten Fehler"
@@ -177,6 +177,15 @@ verify-live:
 	@echo "==> Prüfung gegen die Produktion"
 	@if [ -z "$(LIVE_URL)" ]; then echo "FEHLER: LIVE_URL fehlt. Aufruf: make verify-live LIVE_URL=https://einmalpost.de"; exit 1; fi
 	@php tools/verify-live.php "$(LIVE_URL)"
+	@echo ""
+	@$(MAKE) --no-print-directory funktionsprobe LIVE_URL="$(LIVE_URL)"
+
+## Was der Server tut, nicht was er sagt: ein vollständiger Durchlauf durch
+## einen echten Browser gegen die laufende Installation.
+funktionsprobe:
+	@echo "==> Funktionsprobe im Browser"
+	@if [ -z "$(LIVE_URL)" ]; then echo "FEHLER: LIVE_URL fehlt. Aufruf: make funktionsprobe LIVE_URL=https://einmalpost.de"; exit 1; fi
+	@node tools/live-funktionsprobe.mjs "$(LIVE_URL)"
 
 clean:
 	@rm -rf .phpunit.cache .phpstan-cache build coverage test-results playwright-report

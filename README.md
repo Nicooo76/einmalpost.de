@@ -1,5 +1,7 @@
 # einmalpost
 
+[![verify](https://github.com/Nicooo76/einmalpost.de/actions/workflows/verify.yml/badge.svg)](https://github.com/Nicooo76/einmalpost.de/actions/workflows/verify.yml)
+
 Überträgt ein Geheimnis genau einmal und vergisst es danach.
 
 Der Absender tippt einen Text ein und bekommt einen Link. Wer diesen Link öffnet und den
@@ -230,8 +232,18 @@ Weitere Ziele:
 ```bash
 make coverage       # Abdeckung über beide PHP-Ebenen zusammen
 make check-secrets  # durchsucht die GESAMTE Git-Historie nach Zugangsdaten
-make verify-live LIVE_URL=https://…   # Kopfzeilen gegen eine laufende Installation
+make verify-live LIVE_URL=https://…   # gegen eine laufende Installation
+make funktionsprobe LIVE_URL=https://…  # nur der Browser-Durchlauf
 ```
+
+`verify-live` prüft zweierlei. Zuerst 27 Punkte an Kopfzeilen und Konfiguration — also das,
+was der Server **sagt**: dass HSTS genau einmal ankommt, dass die CSP steht, dass `/s/*` und
+`/api/*` auf `noindex` gesetzt sind. Danach eine Funktionsprobe durch einen echten Browser —
+also das, was er **tut**: anlegen mit Passphrase, QR-Code, abrufen, zweiter Abruf ins Leere,
+falsche Passphrase ohne Teilinhalt. Und dabei die Gegenprobe, die am schwersten wiegt: **keine
+einzige Anfrage an eine fremde Adresse.**
+
+Die Probe legt echte Geheimnisse an und verbraucht sie im selben Lauf wieder.
 
 ### Was die Tests absichern
 
@@ -253,6 +265,29 @@ bricht**. Unter anderem:
   Zufallsquellen, AES ohne Authentifizierung, `SELECT` gefolgt von separatem `DELETE`,
   externe Ressourcen, Werbeaussagen).
 - Kontraste werden gerechnet, nicht geschätzt: mindestens 4,5:1 in beiden Farbschemata.
+- Die Browserkonsole muss still bleiben. Ohne diese Prüfung könnte ein Skript in einem
+  Randbereich stillschweigend scheitern: Die Seite sähe richtig aus, ein Teil der Bedienung
+  wäre tot, und nichts hätte es bemerkt.
+
+### Fortlaufende Prüfung
+
+GitHub Actions fährt bei jedem Push MariaDB und Playwright hoch und lässt `make verify`
+laufen — dieselben vier Ebenen wie auf einem Entwicklungsrechner.
+
+Zwei Eigenheiten, beide Absicht:
+
+**Ohne Gestaltung.** `theme.css`, Schriften und Bildmaterial liegen nicht im Repository.
+Geprüft wird damit genau die Fassung, die ein fremder Klon bekommt — wenn dort etwas
+unbedienbar ist, fällt es hier auf und nicht beim Nutzer.
+
+**Ohne Geheimnisse.** Die Testdatenbank ist leer, der Pepper ist ein fester Testwert, und
+beides steht offen im Makefile. Ein Prüflauf, der Zugangsdaten bräuchte, wäre ein Prüflauf,
+den ein Pull Request von außen nicht ausführen dürfte.
+
+Der Lauf holt die **gesamte** Historie (`fetch-depth: 0`), weil `make check-secrets` jeden
+Commit nach Zugangsdaten durchsucht. Mit einem flachen Klon liefe die Prüfung durch, ohne
+etwas gesehen zu haben — und meldete trotzdem „sauber". Das Werkzeug erkennt diesen Fall
+inzwischen selbst und bricht ab.
 
 ---
 
