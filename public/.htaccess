@@ -1,0 +1,16 @@
+# Alles, was keine vorhandene Datei ist, geht an den Front-Controller.
+# /s/{id} und /api/* sind keine Dateien auf der Platte.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# Verzeichnisinhalte nie auflisten.
+Options -Indexes
+
+# Strict-Transport-Security wird bewusst NICHT hier gesetzt, sondern auf der
+# nginx-Ebene. Genau eine Quelle - sonst kommt die Kopfzeile doppelt an.

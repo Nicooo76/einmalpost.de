@@ -1,0 +1,21 @@
+# Vorlage für deploy.local.mk. Kopieren und ausfüllen:
+#
+#     cp deploy.local.mk.example deploy.local.mk
+#
+# Ohne diese Datei laufen alle Prüfungen normal - nur "make deploy" braucht
+# sie. deploy.local.mk steht in .gitignore, weil der vhost-Benutzer bei den
+# meisten Hostern zugleich der FTP- und SSH-Login ist: In einem öffentlichen
+# Repository wäre er die halbe Zugangsangabe.
+#
+# Die Beispielwerte hier sind bewusst allgemein gehalten. "make check-secrets"
+# schlägt an, wenn echte Serverpfade oder Zugangsnamen im erfassten Stand
+# landen - auch versehentlich in einer Vorlage.
+
+# Ziel für rsync und ssh: ein Eintrag aus ~/.ssh/config oder benutzer@host.
+DEPLOY_HOST      := mein-server
+
+# Verzeichnis auf dem Server. Der Dokumentenstamm ist darin public/.
+DEPLOY_WURZEL    := /pfad/zum/projekt
+
+# Systembenutzer des vhosts - ihm gehören die hochgespielten Dateien.
+DEPLOY_BENUTZER  := mein-vhost-benutzer

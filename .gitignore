@@ -1,0 +1,46 @@
+# --- Zugangsdaten: niemals im Repository ---
+/config/config.php
+/config/*.local.php
+.env
+.env.*
+!.env.example
+
+# --- Abhaengigkeiten (nur Entwicklung, nie ausgeliefert) ---
+/vendor/
+/node_modules/
+
+# --- Testartefakte ---
+/build/
+/coverage/
+/.phpunit.cache/
+/.phpunit.result.cache
+/test-results/
+/playwright-report/
+/blob-report/
+/tests/e2e/.auth/
+
+# --- Werkzeug-Zwischenstaende ---
+/.phpstan-cache/
+*.log
+
+# --- Betriebssystem / Editor ---
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Die Gestaltung selbst gehört nicht ins Repository.
+/public/assets/theme.css
+/public/assets/fonts/
+/public/assets/img/
+
+# --- Betriebsinterna: gehören nicht in ein öffentliches Repository ---
+# Servername, Pfade und der vhost-Benutzer (zugleich FTP-/SSH-Login).
+/deploy.local.mk
+/BETRIEB.local.md
+
+# --- Prüfunterlagen: intern wertvoll, öffentlich eine Angriffsanleitung ---
+# Der Prüfbericht nennt offene Befunde samt Schweregrad, die Übergabe einen
+# Abschnitt "Das würde ich als erstes angreifen".
+/PRUEFBERICHT.md
+/UEBERGABE.md

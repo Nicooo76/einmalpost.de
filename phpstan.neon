@@ -1,0 +1,13 @@
+parameters:
+    level: 9
+    phpVersion:
+        min: 80300
+        max: 80399
+    paths:
+        - src
+        - public
+        - bin
+        - tools
+        - tests
+    tmpDir: .phpstan-cache
+    treatPhpDocTypesAsCertain: false

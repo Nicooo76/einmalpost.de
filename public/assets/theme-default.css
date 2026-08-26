@@ -1,0 +1,255 @@
+/*
+ * theme-default.css — die schmucklose, vollständig bedienbare Fassung.
+ *
+ * Diese Datei liegt im Repository. Wer einmalpost klont, bekommt damit einen
+ * Dienst, der vollständig funktioniert - nur eben in Grau. Das ist Absicht:
+ * Die Selbstbetriebs-Möglichkeit gehört zum Sicherheitsversprechen.
+ *
+ * Das eigentliche Aussehen steht in theme.css und wird danach geladen.
+ * Alles hier ist so geschrieben, dass es sich überschreiben lässt.
+ *
+ * Grundsätze:
+ *   - Keine externe Ressource. Keine Schrift, kein Bild, kein url() auf
+ *     einen fremden Host.
+ *   - Bedienbar ab 320 Pixel Breite.
+ *   - Berührungsflächen mindestens 44 Pixel hoch.
+ *   - Eingabefelder mindestens 16 Pixel groß, sonst zoomt iOS beim Antippen.
+ */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: #000;
+    background: #fff;
+}
+
+/* --- Gerüst ---------------------------------------------------------- */
+
+.site-header,
+.site-main,
+.site-footer {
+    width: 100%;
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+.site-main { padding-bottom: 2rem; }
+
+.skip-link {
+    position: absolute;
+    left: -9999px;
+}
+
+.skip-link:focus {
+    position: static;
+    display: inline-block;
+    padding: 0.5rem;
+}
+
+.brand {
+    font-weight: 700;
+    text-decoration: none;
+    color: inherit;
+    letter-spacing: 0.05em;
+}
+
+.site-footer {
+    border-top: 1px solid #000;
+    font-size: 0.875rem;
+}
+
+.site-footer__nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
+    margin-bottom: 0.75rem;
+}
+
+.site-footer__credit { margin: 0; }
+
+/* Der Verweis auf den Quellcode trägt ein Zeichen. Auch ohne Gestaltung soll
+   es neben dem Text stehen und nicht darüber. */
+.site-footer__link--mit-symbol {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.symbol { flex: none; width: 1em; height: 1em; }
+
+/* --- Text ------------------------------------------------------------ */
+
+h1, h2, h3 { line-height: 1.25; }
+
+.hero__title { font-size: 1.75rem; }
+.hero__lead { font-size: 1.125rem; }
+
+.badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem 0;
+    padding: 0;
+    list-style: none;
+}
+
+.badge {
+    border: 1px solid #000;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8125rem;
+    letter-spacing: 0.05em;
+}
+
+.prose { max-width: 40rem; }
+.note { font-size: 0.875rem; }
+
+.notice {
+    border: 1px solid #000;
+    padding: 0.5rem 0.75rem;
+}
+
+/* --- Karten und Zustände --------------------------------------------- */
+
+.card {
+    border: 1px solid #000;
+    padding: 1rem;
+    margin: 1.5rem 0;
+}
+
+.state__status { font-weight: 700; }
+
+/* --- Formular -------------------------------------------------------- */
+
+.field { display: block; margin-bottom: 1rem; }
+
+.field__label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+    letter-spacing: 0.05em;
+}
+
+.field__input {
+    width: 100%;
+    /* Nicht kleiner als 1rem: iOS zoomt sonst beim Antippen hinein. */
+    font-size: 1rem;
+    font-family: inherit;
+    padding: 0.5rem;
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+}
+
+.field__input--area {
+    min-height: 9rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    resize: vertical;
+}
+
+.field--inline .field__input--select { width: auto; min-width: 10rem; }
+
+.btn {
+    display: inline-block;
+    /* 44 Pixel sind die kleinste Fläche, die sich mit dem Daumen sicher
+       treffen lässt. */
+    min-height: 44px;
+    padding: 0.6rem 1rem;
+    font: inherit;
+    letter-spacing: 0.05em;
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    cursor: pointer;
+}
+
+.btn:disabled { cursor: default; opacity: 0.6; }
+
+.form__actions,
+.state__actions,
+.result__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* --- Code, Link und Geheimnis ---------------------------------------- */
+
+.code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    border: 1px solid #000;
+    padding: 0.5rem;
+    /* Lange Links und lange Geheimnisse müssen umbrechen, sonst schiebt
+       sich die Seite auf dem Telefon seitlich weg. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.code--link { overflow-wrap: anywhere; }
+
+/* --- Schritte und FAQ ------------------------------------------------ */
+
+.steps__list { padding-left: 1.25rem; }
+.step { margin-bottom: 1rem; }
+.step__title { font-size: 1.0625rem; margin-bottom: 0.25rem; }
+
+/* Die Aufklapper laufen ohne JavaScript - <details> und <summary> können
+   das von sich aus. Ein Skript dafür wäre Angriffsfläche für nichts. */
+.faq__item {
+    border-bottom: 1px solid #000;
+    padding: 0.5rem 0;
+}
+
+.faq__question {
+    cursor: pointer;
+    font-weight: 600;
+    /* Auch die Aufklappzeile ist eine Berührungsfläche. */
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+}
+
+.faq__answer { padding-bottom: 0.5rem; }
+
+/* --- Sichtbarkeit ---------------------------------------------------- */
+
+[hidden] { display: none !important; }
+
+/* --- Kleine Bildschirme ---------------------------------------------- */
+
+@media (max-width: 30rem) {
+    .site-header,
+    .site-main,
+    .site-footer { padding: 0.75rem; }
+
+    .hero__title { font-size: 1.5rem; }
+
+    /* Auf schmalen Geräten stehen Knöpfe untereinander und über die
+       volle Breite - nebeneinander wären sie zu schmal zum Treffen. */
+    .form__actions .btn,
+    .state__actions .btn,
+    .result__actions .btn { width: 100%; }
+}
+
+/* --- Bewegung sparsam ------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}

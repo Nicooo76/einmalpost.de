@@ -1,0 +1,9 @@
+{
+    "name": "einmalpost",
+    "private": true,
+    "type": "module",
+    "description": "Browsertests. Wird nie ausgeliefert - das Frontend hat keine Laufzeitabhängigkeiten.",
+    "devDependencies": {
+        "@playwright/test": "^1.50.0"
+    }
+}
