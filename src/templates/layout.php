@@ -74,6 +74,14 @@ $englischerWeg = $fassungen['en'];
 <?php if (\Einmalpost\View::hatGestaltung()): ?>
 <link rel="stylesheet" href="/assets/theme.css">
 <?php endif; ?>
+<?php /* Die Bildmarke ist Bildmaterial und liegt wie die Gestaltung nicht
+         im Repository. Dieselbe Regel wie oben: Was ein Klon nie haben
+         wird, fordert die Seite dort auch nicht an. */ ?>
+<?php if (\Einmalpost\View::hatBildmarke()): ?>
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" sizes="any">
+<link rel="icon" href="/assets/img/favicon.ico" sizes="48x48 32x32 16x16">
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
+<?php endif; ?>
 <?= $kopfExtra ?>
 </head>
 <body class="page <?= $h($meta->bodyClass) ?>" data-sprache="<?= $h($meta->sprache) ?>">

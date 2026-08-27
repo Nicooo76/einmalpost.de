@@ -121,6 +121,7 @@ DEPLOY_AUSSCHLUSS := \
 	--exclude 'tests' --exclude 'build' \
 	--exclude 'tools/verify-live.php' --exclude 'tools/check-history.sh' \
 	--exclude 'tools/write-test-config.php' --exclude 'tools/verbotene-muster.sh' \
+	--exclude 'tools/bildmarke-rastern.mjs' \
 	--exclude '.phpunit.cache' --exclude '.phpstan-cache' \
 	--exclude 'test-results' --exclude 'playwright-report' \
 	--exclude 'config/config.php' --exclude '.env' --exclude '.env.*' \

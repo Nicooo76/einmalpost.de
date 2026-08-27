@@ -43,6 +43,7 @@ final class GestaltungOptionalTest extends TestCase
     protected function tearDown(): void
     {
         View::$gestaltungsdatei = null;
+        View::$bildmarkendatei  = null;
 
         if ($this->spielwiese !== '' && is_dir($this->spielwiese)) {
             exec(sprintf('rm -rf %s', escapeshellarg($this->spielwiese)));
@@ -120,6 +121,45 @@ final class GestaltungOptionalTest extends TestCase
         self::assertSame(
             is_file(dirname(__DIR__, 2) . '/public/assets/theme.css'),
             View::hatGestaltung()
+        );
+    }
+
+    /**
+     * Für die Bildmarke gilt dieselbe Regel wie für die Gestaltung: Sie ist
+     * Bildmaterial, liegt nicht im Repository, und ein Klon darf sie deshalb
+     * auch nicht anfordern - sonst drei 404 je Seitenaufruf.
+     */
+    public function testOhneBildmarkeStehtKeinVerweisDarauf(): void
+    {
+        View::$bildmarkendatei = $this->spielwiese . '/gibt-es-nicht.svg';
+
+        $html = $this->startseite();
+
+        self::assertStringNotContainsString('/assets/img/favicon', $html);
+        self::assertStringNotContainsString('apple-touch-icon', $html);
+    }
+
+    public function testMitBildmarkeStehenDieDreiVerweise(): void
+    {
+        $datei = $this->spielwiese . '/favicon.svg';
+        file_put_contents($datei, "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n");
+
+        View::$bildmarkendatei = $datei;
+
+        $html = $this->startseite();
+
+        self::assertStringContainsString('/assets/img/favicon.svg', $html);
+        self::assertStringContainsString('/assets/img/favicon.ico', $html);
+        self::assertStringContainsString('/assets/img/apple-touch-icon.png', $html);
+    }
+
+    public function testOhneEinstellungGiltDerWirklichePfadDerBildmarke(): void
+    {
+        View::$bildmarkendatei = null;
+
+        self::assertSame(
+            is_file(dirname(__DIR__, 2) . '/public/assets/img/favicon.svg'),
+            View::hatBildmarke()
         );
     }
 }

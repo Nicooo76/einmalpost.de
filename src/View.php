@@ -30,11 +30,31 @@ final class View
     public static ?string $gestaltungsdatei = null;
 
     /**
+     * Wo die Bildmarke liegt (SVG-Master; daneben favicon.ico und
+     * apple-touch-icon.png aus tools/bildmarke-rastern.mjs).
+     *
+     * Wie die Gestaltung ist sie Bildmaterial und gehört nicht ins
+     * Repository (Abschnitt 12). Es gilt dieselbe Regel wie bei theme.css:
+     * Was ein Klon nicht hat, fordert die Vorlage auch nicht an - sonst
+     * bekäme dort jeder Seitenaufruf drei 404. Die drei Dateien werden
+     * zusammen aufgespielt, deshalb genügt der Blick auf den Master.
+     */
+    public static ?string $bildmarkendatei = null;
+
+    /**
      * Ist die private Gestaltung vorhanden?
      */
     public static function hatGestaltung(): bool
     {
         return is_file(self::$gestaltungsdatei ?? dirname(__DIR__) . '/public/assets/theme.css');
+    }
+
+    /**
+     * Ist die Bildmarke vorhanden?
+     */
+    public static function hatBildmarke(): bool
+    {
+        return is_file(self::$bildmarkendatei ?? dirname(__DIR__) . '/public/assets/img/favicon.svg');
     }
 
     public static function createPage(string $nonce, string $sprache = Sprache::DEUTSCH): string
