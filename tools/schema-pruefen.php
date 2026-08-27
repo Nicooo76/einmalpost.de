@@ -131,6 +131,31 @@ if (!is_string($klausel)) {
     );
 }
 
+// --- Passt das Netzprotokoll zur Größengrenze? -----------------------------
+
+// Ein payload dieser Größe muss durch eine einzelne MariaDB-Anweisung passen.
+// Der Standardwert von max_allowed_packet ist 16 MiB - das läge nur knapp über
+// dem größten möglichen payload und ließe keinen Raum für den Protokollrahmen.
+// Reißt die Grenze, scheitert erst das Schreiben eines großen Anhangs, und
+// zwar in der Produktion und bei einem echten Nutzer.
+$paket = $pdo->query('SELECT @@max_allowed_packet');
+$erlaubt = $paket === false ? 0 : (int) $paket->fetchColumn();
+
+// Der payload plus der Rahmen der Anweisung. 64 KB sind großzügig gerechnet -
+// die Anweisung selbst ist kurz, und der payload geht als Parameter mit.
+$noetig = SecretStore::PAYLOAD_MAX_BYTES + 65_536;
+
+if ($erlaubt < $noetig) {
+    $abweichungen[] = sprintf(
+        'max_allowed_packet ist %d Byte (%.1f MB). Für einen payload von bis zu %d Byte '
+        . 'werden mindestens %d Byte gebraucht. Ein großer Anhang ließe sich nicht speichern.',
+        $erlaubt,
+        $erlaubt / 1_048_576,
+        SecretStore::PAYLOAD_MAX_BYTES,
+        $noetig
+    );
+}
+
 // --- Ergebnis -------------------------------------------------------------
 
 if ($abweichungen === []) {
