@@ -37,6 +37,7 @@ final class DeployAusschlussTest extends TestCase
             ['UEBERGABE.md', 'Behauptungssammlung, nennt offene Punkte'],
             ['config/config.php', 'Zugangsdaten zur Datenbank'],
             ['.env', 'Zugangsdaten'],
+            ['deploy.local.mk.example', 'Vorlage ohne echte Werte - der Dienst braucht sie nicht'],
         ];
     }
 
@@ -71,7 +72,8 @@ final class DeployAusschlussTest extends TestCase
         // Entweder die Datei selbst oder ein Muster, das sie erfasst.
         $erfasst = str_contains($liste, "'" . $datei . "'")
             || str_contains($liste, "'*.local.md'") && str_ends_with($datei, '.local.md')
-            || str_contains($liste, "'*.local.mk'") && str_ends_with($datei, '.local.mk');
+            || str_contains($liste, "'*.local.mk'") && str_ends_with($datei, '.local.mk')
+            || str_contains($liste, "'*.example'") && str_ends_with($datei, '.example');
 
         self::assertTrue(
             $erfasst,

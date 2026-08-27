@@ -124,7 +124,7 @@ DEPLOY_AUSSCHLUSS := \
 	--exclude '.phpunit.cache' --exclude '.phpstan-cache' \
 	--exclude 'test-results' --exclude 'playwright-report' \
 	--exclude 'config/config.php' --exclude '.env' --exclude '.env.*' \
-	--exclude '*.local.md' --exclude '*.local.mk' \
+	--exclude '*.local.md' --exclude '*.local.mk' --exclude '*.example' \
 	--exclude 'PRUEFBERICHT.md' --exclude 'UEBERGABE.md' \
 	--exclude 'CLAUDE.md' --exclude '.github' \
 	--exclude 'Makefile' --exclude 'composer.*' --exclude 'package*.json' \
