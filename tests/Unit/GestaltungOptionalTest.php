@@ -151,6 +151,12 @@ final class GestaltungOptionalTest extends TestCase
         self::assertStringContainsString('/assets/img/favicon.svg', $html);
         self::assertStringContainsString('/assets/img/favicon.ico', $html);
         self::assertStringContainsString('/assets/img/apple-touch-icon.png', $html);
+
+        // Dieselbe Datei steht als Bildmarke im Seitenkopf - und zwar mit
+        // leerem alt: Den Namen trägt die Wortmarke daneben, ein Vorleser
+        // soll ihn nicht zweimal hören.
+        self::assertStringContainsString('class="brand__mark"', $html);
+        self::assertStringContainsString('alt=""', $html);
     }
 
     public function testOhneEinstellungGiltDerWirklichePfadDerBildmarke(): void

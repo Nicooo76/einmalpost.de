@@ -98,6 +98,13 @@ $englischerWeg = $fassungen['en'];
 
 <header class="site-header">
     <a class="brand" href="<?= $englisch ? '/en' : '/' ?>">
+<?php /* Die Bildmarke ist dieselbe Datei wie das Favicon und genauso
+         bedingt: Ein Klon ohne das private Bildmaterial zeigt nur die
+         Wortmarke. Leeres alt, weil die Wortmarke daneben den Namen trägt.
+         Feste Maße, damit nichts springt, solange das Bild lädt. */ ?>
+<?php if (\Einmalpost\View::hatBildmarke()): ?>
+        <img class="brand__mark" src="/assets/img/favicon.svg" alt="" width="30" height="30">
+<?php endif; ?>
         <span class="brand__part brand__part--first">EINMAL</span><span class="brand__part brand__part--second">POST</span>
     </a>
 </header>

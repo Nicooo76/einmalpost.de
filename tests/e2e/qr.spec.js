@@ -7,7 +7,31 @@
 // Behauptung.
 
 import { test, expect } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
 import { erzeugeGeheimnis } from './helfer.js';
+
+// Für die Rückles-Tests: Der Dienst lädt selbst keine data:-Bilder -
+// img-src 'self' verbietet sie, und der QR hängt als Inline-SVG im DOM.
+// Nur diese Tests lesen das SVG über ein data:-Bild in einen Leser zurück.
+// Das geschieht auf einem Prüfstand ohne die CSP des Dienstes; der
+// Kodierer wird ihm direkt aus der ausgelieferten Datei mitgegeben.
+//
+// Der Prüfstand muss vom selben Ursprung kommen, nicht von about:blank:
+// BarcodeDetector gibt es nur im sicheren Kontext, und eine Seite ohne
+// Herkunft hat keinen. Deshalb beantwortet der Test eine eigene Route
+// selbst - gleicher Ursprung, aber ohne die Kopfzeilen des Dienstes.
+const QR_DATEI = fileURLToPath(new URL('../../public/assets/qr.js', import.meta.url));
+
+async function qrPruefstand(context) {
+    const seite = await context.newPage();
+    await seite.route('**/qr-pruefstand', (route) => route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><title>QR-Prüfstand</title>',
+    }));
+    await seite.goto('/qr-pruefstand');
+    await seite.addScriptTag({ path: QR_DATEI });
+    return seite;
+}
 
 test.describe('QR-Kodierer', () => {
     test('die Formatinformation stimmt mit der Spezifikation überein', async ({ page }) => {
@@ -169,15 +193,15 @@ test.describe('QR-Kodierer', () => {
         expect(treffer.gefunden).toBeGreaterThan(0);
     });
 
-    test('ein echter Barcode-Leser bekommt den Link zurück', async ({ page, browserName }) => {
+    test('ein echter Barcode-Leser bekommt den Link zurück', async ({ context, browserName }) => {
         test.skip(browserName !== 'chromium', 'BarcodeDetector gibt es nur in Chromium.');
 
-        await page.goto('/');
+        const seite = await qrPruefstand(context);
 
-        const vorhanden = await page.evaluate(() => 'BarcodeDetector' in window);
+        const vorhanden = await seite.evaluate(() => 'BarcodeDetector' in window);
         test.skip(!vorhanden, 'BarcodeDetector in dieser Chromium-Fassung nicht verfügbar.');
 
-        const ergebnis = await page.evaluate(async () => {
+        const ergebnis = await seite.evaluate(async () => {
             const text = 'https://einmalpost.de/s/dSWBvgCoTlZqXeZEF7yfxw#'
                 + '6iuWgajhdWNvkgSef7P9t29hsTLbL7Sx-AqD1O4MdJs';
 
@@ -203,14 +227,14 @@ test.describe('QR-Kodierer', () => {
         expect(ergebnis.gelesen[0]).toBe(ergebnis.hineingegeben);
     });
 
-    test('auch ein Link mit Passphrase-Markierung wird zurückgelesen', async ({ page, browserName }) => {
+    test('auch ein Link mit Passphrase-Markierung wird zurückgelesen', async ({ context, browserName }) => {
         test.skip(browserName !== 'chromium', 'BarcodeDetector gibt es nur in Chromium.');
 
-        await page.goto('/');
-        const vorhanden = await page.evaluate(() => 'BarcodeDetector' in window);
+        const seite = await qrPruefstand(context);
+        const vorhanden = await seite.evaluate(() => 'BarcodeDetector' in window);
         test.skip(!vorhanden, 'BarcodeDetector nicht verfügbar.');
 
-        const ergebnis = await page.evaluate(async () => {
+        const ergebnis = await seite.evaluate(async () => {
             const text = 'https://einmalpost.de/s/dSWBvgCoTlZqXeZEF7yfxw#p.'
                 + '6iuWgajhdWNvkgSef7P9t29hsTLbL7Sx-AqD1O4MdJs';
 

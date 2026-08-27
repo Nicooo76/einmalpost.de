@@ -82,6 +82,13 @@ final class KopfzeilenTest extends TestCase
         self::assertStringContainsString("object-src 'none'", $csp);
         self::assertStringContainsString("base-uri 'none'", $csp);
         self::assertStringContainsString("require-trusted-types-for 'script'", $csp);
+
+        // Bilder nur von der eigenen Domain - und ausdrücklich kein data:.
+        // Der Dienst braucht es nirgends (QR ist Inline-SVG, der Anhang lädt
+        // über blob:), und eine ungenutzte Erlaubnis ist nur Fläche. Wer sie
+        // wieder braucht, ändert erst diesen Test und sagt warum.
+        self::assertStringContainsString("img-src 'self';", $csp);
+        self::assertStringNotContainsString('data:', $csp);
     }
 
     #[DataProvider('seiten')]

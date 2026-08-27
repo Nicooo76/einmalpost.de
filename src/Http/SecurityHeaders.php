@@ -37,9 +37,11 @@ final class SecurityHeaders
                 // das hidden-Umschalten der Zustände. Fremde Hosts sind
                 // weiterhin ausgeschlossen - default-src 'none' gilt.
                 . "style-src 'self' 'unsafe-inline'; "
-                // Schriften und Bilder ausschließlich aus dem eigenen Projekt.
+                // Schriften und Bilder ausschließlich aus dem eigenen
+                // Projekt. Kein data: - der QR-Code ist Inline-SVG, der
+                // Anhang lädt über blob:, kein Bild braucht es.
                 . "font-src 'self'; "
-                . "img-src 'self' data:; "
+                . "img-src 'self'; "
                 . "connect-src 'self'; "
                 . "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; "
                 . "require-trusted-types-for 'script'",

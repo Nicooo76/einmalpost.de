@@ -279,7 +279,7 @@ existierende — die Abfrage entscheidet, nicht ein `if` davor.
 ### Von PHP gesetzt
 
 ```
-Content-Security-Policy: default-src 'none'; script-src 'nonce-{zufall}' 'strict-dynamic'; style-src 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; require-trusted-types-for 'script'
+Content-Security-Policy: default-src 'none'; script-src 'nonce-{zufall}' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; require-trusted-types-for 'script'
 Referrer-Policy: no-referrer
 X-Content-Type-Options: nosniff
 Permissions-Policy: (restriktiv — alles abschalten, was nicht gebraucht wird)
@@ -294,6 +294,14 @@ Angreifer konnte einen Empfänger dazu bringen, das Geheimnis unbeabsichtigt zu 
 Vorlagen ein Inline-`<style>` tragen; `connect-src 'self'` erlaubt genau die eigenen Aufrufe
 an `/api/*` und nichts sonst. Geprüft von `tests/e2e/einbettung.spec.js` (versucht die
 Einbettung tatsächlich) und der Kopfzeilenprobe in `tests/e2e/csp.spec.js`.
+
+Mit der Gestaltung kamen `style-src 'self'`, `font-src 'self'` und `img-src 'self'` dazu
+(Stilvorlagen, eigene Schriften, Bildmarke im Seitenkopf — Letzteres seit 2026-08-27,
+Freigabe durch den Auftraggeber). Ein anfangs miterlaubtes `data:` in `img-src` wurde am
+selben Tag wieder entfernt: Der QR-Code ist Inline-SVG, der Anhang lädt über `blob:`,
+kein Bild braucht es — eine ungenutzte Erlaubnis ist nur Fläche. Alles Erlaubte zeigt
+ausschließlich auf die eigene Domain; fremde Hosts bleiben durch `default-src 'none'`
+ausgeschlossen.
 
 ### Von nginx über Plesk gesetzt — **nicht** von PHP
 
