@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Einmalpost\Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -129,6 +130,61 @@ final class HistorienpruefungTest extends TestCase
             1,
             $stand,
             "Eine config.php in der Historie muss auffallen. Ausgabe:\n" . $ausgabe
+        );
+    }
+
+    /**
+     * Der Fall, der beinahe durchgerutscht wäre.
+     *
+     * Die erste Prüfung sucht über Pfadangaben - `.env` trifft damit nur die
+     * Datei im Wurzelverzeichnis, nicht `app/.env`. Die zweite Prüfung sucht
+     * über einen Ausdruck auf allen Objektnamen und findet sie; sie hat den
+     * Fund aber nur ausgegeben, ohne zu beanstanden. Ergebnis: Rückgabewert
+     * 0 und die Meldung "Die Historie ist sauber", während ein Passwort in
+     * der Historie stand.
+     *
+     * @return list<array{string}>
+     */
+    public static function zugangsdateienInUnterordnern(): array
+    {
+        return [['app/.env'], ['config/geheim.pem'], ['deploy/id_rsa'], ['etc/server.key']];
+    }
+
+    #[DataProvider('zugangsdateienInUnterordnern')]
+    public function testEineZugangsdateiImUnterordnerFaelltAuch(string $pfad): void
+    {
+        $repo = $this->spielwiese . '/tief-' . md5($pfad);
+        $this->legeRepoAn($repo);
+
+        file_put_contents($repo . '/harmlos.txt', "nichts besonderes\n");
+        $this->commit($repo, 'erster Stand');
+
+        $ziel = $repo . '/' . $pfad;
+        @mkdir(dirname($ziel), 0o700, true);
+        file_put_contents($ziel, "DB_PASSWORD=streng-geheim-4711\n");
+
+        exec(sprintf(
+            'cd %s && git add -f %s && git commit -q -m %s',
+            escapeshellarg($repo),
+            escapeshellarg($pfad),
+            escapeshellarg('aus Versehen mitgenommen')
+        ));
+
+        unlink($ziel);
+        $this->commit($repo, 'wieder entfernt');
+
+        exec(
+            sprintf('cd %s && git log --all --oneline -- %s', escapeshellarg($repo), escapeshellarg($pfad)),
+            $inHistorie
+        );
+        self::assertNotEmpty($inHistorie, 'Der Testaufbau hat die Datei gar nicht erst eingeschmuggelt.');
+
+        [$stand, $ausgabe] = $this->pruefeIn($repo);
+
+        self::assertSame(
+            1,
+            $stand,
+            $pfad . " in der Historie muss auffallen, nicht nur gemeldet werden.\nAusgabe:\n" . $ausgabe
         );
     }
 

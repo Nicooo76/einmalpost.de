@@ -107,6 +107,14 @@ coverage: testdb
 ## Dort legt Let's Encrypt seine Prüfdateien ab. Ausgeschlossene Pfade sind
 ## bei rsync zugleich vor dem Löschen geschützt - das Verzeichnis überlebt
 ## also auch einen Abgleich mit --delete während eines Erneuerungsfensters.
+## Was nicht ausgeliefert wird.
+##
+## Nicht nur, was im Repository fehlt: Der Abgleich nimmt das
+## Arbeitsverzeichnis, und darin liegen auch die Betriebsanleitung, die
+## Deploy-Einstellungen, der Prüfbericht und die Behauptungssammlung. Über
+## HTTP wäre davon nichts erreichbar - der Dokumentenstamm liegt eine Ebene
+## tiefer -, aber wer den Webserver-Benutzer erlangt, fände dort eine
+## Landkarte. Der Dienst braucht keine dieser Dateien.
 DEPLOY_AUSSCHLUSS := \
 	--exclude '.git' --exclude '.well-known/' \
 	--exclude 'vendor' --exclude 'node_modules' \
@@ -116,6 +124,9 @@ DEPLOY_AUSSCHLUSS := \
 	--exclude '.phpunit.cache' --exclude '.phpstan-cache' \
 	--exclude 'test-results' --exclude 'playwright-report' \
 	--exclude 'config/config.php' --exclude '.env' --exclude '.env.*' \
+	--exclude '*.local.md' --exclude '*.local.mk' \
+	--exclude 'PRUEFBERICHT.md' --exclude 'UEBERGABE.md' \
+	--exclude 'CLAUDE.md' --exclude '.github' \
 	--exclude 'Makefile' --exclude 'composer.*' --exclude 'package*.json' \
 	--exclude 'playwright.config.js' --exclude 'phpunit.xml' --exclude 'phpstan.neon' \
 	--exclude '.DS_Store'

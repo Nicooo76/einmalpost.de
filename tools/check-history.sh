@@ -35,11 +35,21 @@ else
 fi
 
 echo "==> Verdächtige Dateinamen in der gesamten Historie"
+# Diese Prüfung sieht mehr als die vorige: Die arbeitet mit Pfadangaben, und
+# `.env` trifft dort nur die Datei im Wurzelverzeichnis - `app/.env` nicht.
+# Hier läuft ein Ausdruck über alle jemals erfassten Objektnamen.
+#
+# Sie hat ihre Funde lange nur ausgegeben, ohne BEANSTANDET zu setzen. Damit
+# meldete das Werkzeug "Die Historie ist sauber", während ein Passwort in
+# einem Unterordner stand - schlimmer als keine Prüfung, weil es wie eine
+# bestandene aussah.
 NAMEN=$(git rev-list --all --objects | awk '{print $2}' | sort -u \
-    | grep -E '(^|/)config/config\.php$|\.env($|\.)|\.pem$|\.key$|id_rsa' | grep -v 'example' || true)
+    | grep -E '(^|/)config/config\.php$|(^|/)\.env($|\.)|\.pem$|\.key$|(^|/)id_rsa' | grep -v 'example' || true)
 
 if [ -n "$NAMEN" ]; then
-    echo "$NAMEN" | sed 's/^/    geprüft: /'
+    echo "  BEANSTANDET - diese Dateien standen einmal in der Historie:"
+    echo "$NAMEN" | sed 's/^/    /'
+    BEANSTANDET=1
 else
     echo "  ok - keine"
 fi

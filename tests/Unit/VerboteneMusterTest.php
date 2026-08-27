@@ -185,6 +185,20 @@ final class VerboteneMusterTest extends TestCase
             // Und auch eine, die dem Namensraum ähnelt.
             file_put_contents($probe, "var x = 'http://www.w3.org.beispiel.test/2000/svg';\n");
             self::assertSame(1, $laufen(), 'Eine nachgeahmte Adresse darf nicht durchrutschen.');
+
+            // Der Fall, der die Ausnahme fast zum Scheunentor gemacht hätte:
+            // beides in **derselben** Zeile. Wird die Ausnahme als
+            // Zeilenfilter angewandt, verschwindet die fremde Adresse
+            // zusammen mit dem Namensraum aus der Prüfung.
+            file_put_contents(
+                $probe,
+                "var NS = 'http://www.w3.org/2000/svg'; var weg = 'http://beispiel.test/sammeln';\n"
+            );
+            self::assertSame(
+                1,
+                $laufen(),
+                'Eine fremde Adresse in derselben Zeile wie der Namensraum muss auffallen.'
+            );
         } finally {
             @unlink($probe);
         }

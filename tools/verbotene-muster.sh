@@ -41,9 +41,11 @@ AUSNAHME_REMOTE_ADDR='src/Http/Request.php'
 # genau diese eine Zeichenkette - jede andere http-Adresse, auch in derselben
 # Datei, fällt weiterhin auf.
 AUSNAHME_SVG_NS='http://www\.w3\.org/2000/svg'
+# Wird als sed-Ausdruck aus den Zeilen geschnitten, nicht als Zeilenfilter
+# angewandt - siehe die Begründung in pruefe().
 
 pruefe() {
-    local muster="$1" name="$2" erlaubt="${3:-}"
+    local muster="$1" name="$2" erlaubt="${3:-}" schneide="${4:-}"
     local treffer
     # Nur Code. Lizenztexte, Schriftdateien und Bilder enthalten keine
     # ausführbaren Muster - die OFL etwa nennt in ihrem Text eine
@@ -53,6 +55,20 @@ pruefe() {
         --include="*.sql" --include="*.html" \
         2>/dev/null | grep -vE "$KEIN_KOMMENTAR")
 
+    # Eine sanktionierte Zeichenkette wird herausgeschnitten, bevor gesucht
+    # wird - nicht die ganze Zeile verworfen. Sonst verschwände mit ihr auch
+    # alles andere, was in derselben Zeile steht: Ein
+    #   var NS = 'http://www.w3.org/2000/svg'; var weg = 'http://fremd.test/…';
+    # ginge sonst vollständig durch, obwohl nur der erste Teil erlaubt ist.
+    if [ -n "$schneide" ]; then
+        treffer=$(grep -rnE "$muster" "${ORDNER[@]}" \
+            --include="*.php" --include="*.js" --include="*.css" \
+            --include="*.sql" --include="*.html" \
+            2>/dev/null | grep -vE "$KEIN_KOMMENTAR" \
+            | sed "s|$schneide||g" | grep -E "$muster" || true)
+    fi
+
+    # Eine sanktionierte Datei dagegen wird ganz ausgenommen.
     if [ -n "$erlaubt" ]; then
         treffer=$(echo "$treffer" | grep -v "$erlaubt")
     fi
@@ -89,7 +105,7 @@ pruefe 'AES-CBC' 'AES-CBC'
 pruefe 'AES-CTR' 'AES-CTR'
 
 # --- Externe Ressourcen ---
-pruefe 'http://'                'http://' "$AUSNAHME_SVG_NS"
+pruefe 'http://'                'http://' '' "$AUSNAHME_SVG_NS"
 pruefe '<script[^>]+src[[:space:]]*=[[:space:]]*["'"'"']https?://' 'externes <script src>'
 pruefe 'cdn\.'                  'cdn.'
 pruefe 'googleapis'            'googleapis'
