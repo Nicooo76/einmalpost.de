@@ -179,7 +179,14 @@
             var daten = await antwort.json();
             var schluesselText = einmalpost.zuBase64Url(verschluesselt.schluessel);
 
-            var link = window.location.origin + '/s/' + daten.id + '#'
+            // Der Weg trägt die Sprache mit: Wer den Link auf der englischen
+            // Seite erzeugt, verschickt ihn in aller Regel an jemanden, der
+            // Englisch liest. Ohne das Präfix bekäme der Empfänger eine
+            // deutsche Anzeigeseite - samt der Erklärung, warum sein Inhalt
+            // trotz eines Fehlschlags verbraucht ist.
+            var weg = document.body.dataset.sprache === 'en' ? '/en/s/' : '/s/';
+
+            var link = window.location.origin + weg + daten.id + '#'
                 + (verschluesselt.mitPassphrase ? PASSPHRASE_MARKE : '') + schluesselText;
 
             // textContent, nie innerHTML.

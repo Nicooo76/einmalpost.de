@@ -43,19 +43,30 @@ test.describe('Grundlauf', () => {
         await page.goto('about:blank');
         await page.goto(geheimnis.pfad);
 
-        // Zwei Klicks so schnell hintereinander, wie ein ungeduldiger Mensch
-        // sie auslöst - ohne auf eine Antwort zu warten.
-        await Promise.all([
-            page.click('#anzeigen'),
-            page.click('#anzeigen', { force: true }).catch(() => {})
-        ]);
+        // Jede Anfrage an /api/reveal zählen. Zwei wären genau der Fehler.
+        const abrufe = [];
+        page.on('request', (r) => {
+            if (r.url().includes('/api/reveal') && r.method() === 'POST') {
+                abrufe.push(r.url());
+            }
+        });
+
+        // Zwei Klicks ohne Umweg über Playwright, das sonst auf einen
+        // klickbaren Knopf warten würde. Der zweite hebt die Sperre am Knopf
+        // vorher auf - sonst prüfte der Test nur `disabled` und nicht den
+        // Riegel dahinter.
+        await page.evaluate(() => {
+            const knopf = document.getElementById('anzeigen');
+
+            knopf.click();
+            knopf.disabled = false;
+            knopf.click();
+        });
 
         await page.waitForSelector('#ergebnis:not([hidden])', { timeout: 30000 });
-
-        // Und die Anzeige bleibt stehen, statt von einer zweiten Antwort
-        // überschrieben zu werden.
         await page.waitForTimeout(2000);
 
+        expect(abrufe).toHaveLength(1);
         expect(await page.textContent('#inhalt')).toBe('zweimal geklickt');
         await expect(page.locator('#ergebnis')).toBeVisible();
         await expect(page.locator('#fortgeschrieben')).toBeHidden();
@@ -64,19 +75,26 @@ test.describe('Grundlauf', () => {
         expect(existiert(geheimnis.id)).toBe(false);
     });
 
-    test('während des Abrufs sind die Knöpfe gesperrt', async ({ page }) => {
+    test('während des Abrufs ist der Knopf gesperrt', async ({ page }) => {
         const geheimnis = await erzeugeGeheimnis(page, 'einen Moment bitte');
 
         await page.goto('about:blank');
         await page.goto(geheimnis.pfad);
 
-        // Vor dem Klick offen ...
         expect(await page.locator('#anzeigen').isDisabled()).toBe(false);
 
-        await page.click('#anzeigen');
+        // Unmittelbar nach dem Klick, noch während der Abruf läuft.
+        const gesperrt = await page.evaluate(() => {
+            document.getElementById('anzeigen').click();
+
+            return document.getElementById('anzeigen').disabled;
+        });
+
+        expect(gesperrt).toBe(true);
+
         await page.waitForSelector('#ergebnis:not([hidden])', { timeout: 30000 });
 
-        // ... und danach wieder offen. Bliebe die Seite gesperrt, käme der
+        // Und danach wieder offen. Bliebe die Seite gesperrt, käme der
         // Empfänger nach einem Fehler an nichts mehr heran.
         expect(await page.locator('#anzeigen').isDisabled()).toBe(false);
     });

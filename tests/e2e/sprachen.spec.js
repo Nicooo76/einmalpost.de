@@ -101,11 +101,15 @@ test.describe('Sprachfassungen', () => {
 
         const adresse = new URL(await page.textContent('#link'));
 
-        // Der Link zeigt auf die Fassung, auf der er erzeugt wurde.
-        expect(adresse.pathname).toMatch(/^\/s\//);
+        // Der Link zeigt auf die Fassung, auf der er erzeugt wurde. Sonst
+        // bekäme der Empfänger eine deutsche Anzeigeseite - samt der
+        // Erklärung, warum sein Inhalt trotz eines Fehlschlags verbraucht ist.
+        expect(adresse.pathname).toMatch(/^\/en\/s\//);
 
         await page.goto('about:blank');
-        await page.goto('/en' + adresse.pathname + adresse.hash);
+
+        // Kein zusätzliches Präfix mehr: Der Link trägt es selbst.
+        await page.goto(adresse.pathname + adresse.hash);
 
         await expect(page.locator('#bestaetigung')).toContainText('SOMETHING CONFIDENTIAL');
 
