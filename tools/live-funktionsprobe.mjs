@@ -5,9 +5,14 @@
  * sagt. Diese Probe prüft, was er tut: einen vollständigen Durchlauf durch
  * einen echten Browser, mit Passphrase, QR-Code und zweitem Abruf.
  *
- * Sie legt dabei echte Geheimnisse an. Die verbraucht sie im selben Lauf
- * wieder; liegen bleibt nichts, was nicht ohnehin nach einer Stunde
- * verschwinden würde.
+ * Sie legt dabei echte Geheimnisse an und verbraucht sie im selben Lauf
+ * wieder. Für den Fall, dass sie vorher abbricht, wählt sie ausdrücklich die
+ * kürzeste Laufzeit - dann verschwindet der Rest nach einer Stunde von
+ * selbst. Ohne diese Wahl stünde die Vorgabe des Formulars, und das ist ein
+ * Tag.
+ *
+ * Ein Eintrag im Rate-Limit bleibt ebenfalls zurück: der HMAC der eigenen
+ * Adresse, mit einer Stunde Ablauf. Die Adresse selbst steht dort nie.
  *
  *   node tools/live-funktionsprobe.mjs https://einmalpost.de
  *
@@ -51,6 +56,7 @@ try {
     const anlegen = await kontext.newPage();
     await anlegen.goto(ZIEL + '/', { waitUntil: 'networkidle' });
     await anlegen.fill('#geheimnis', MARKE);
+    await anlegen.selectOption('#ttl', '3600');
     await anlegen.fill('#passphrase', PASS);
     await anlegen.click('#absenden');
     await anlegen.waitForSelector('#ergebnis:not([hidden])', { timeout: 30000 });
@@ -103,6 +109,7 @@ try {
     const zweites = await kontext.newPage();
     await zweites.goto(ZIEL + '/', { waitUntil: 'networkidle' });
     await zweites.fill('#geheimnis', MARKE + '-zwei');
+    await zweites.selectOption('#ttl', '3600');
     await zweites.fill('#passphrase', PASS);
     await zweites.click('#absenden');
     await zweites.waitForSelector('#ergebnis:not([hidden])', { timeout: 30000 });

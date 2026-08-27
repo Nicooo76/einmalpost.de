@@ -231,12 +231,29 @@ final class VerboteneMusterTest extends TestCase
      */
     public function testDieVorlagenEnthaltenKeineGestaltung(): void
     {
-        $vorlagen = array_merge(
-            glob(dirname(__DIR__, 2) . '/src/templates/*.php') ?: [],
-            glob(dirname(__DIR__, 2) . '/src/templates/pages/*.php') ?: []
+        // Rekursiv, nicht über feste Globs: Die englischen Vorlagen liegen in
+        // einem Unterverzeichnis und fielen sonst heraus - der Prüfer bliebe
+        // grün, während dort ein Farbwert stünde. Genau so ist es beim Bauen
+        // der englischen Fassung beinahe passiert.
+        $vorlagen = [];
+
+        $lauf = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator(dirname(__DIR__, 2) . '/src/templates')
         );
 
-        self::assertGreaterThan(4, count($vorlagen), 'Es werden zu wenige Vorlagen geprüft.');
+        /** @var SplFileInfo $datei */
+        foreach ($lauf as $datei) {
+            if ($datei->isFile() && $datei->getExtension() === 'php') {
+                $vorlagen[] = $datei->getPathname();
+            }
+        }
+
+        sort($vorlagen);
+
+        // Die Schranke liegt dicht unter der tatsächlichen Zahl. Fällt später
+        // ein Verzeichnis wieder heraus, wird das hier rot - eine großzügige
+        // Schranke würde es durchgehen lassen.
+        self::assertGreaterThan(8, count($vorlagen), 'Es werden zu wenige Vorlagen geprüft.');
 
         foreach ($vorlagen as $datei) {
             $inhalt = (string) file_get_contents($datei);

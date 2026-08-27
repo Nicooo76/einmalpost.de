@@ -433,7 +433,7 @@ geteilt, und ein Test vergleicht die `id`-Listen beider Seiten.
 ## Mitwirken
 
 Der verbindliche Rahmen steht in [CLAUDE.md](CLAUDE.md): das Sicherheitsversprechen, die
-Krypto-Festlegungen, das Datenmodell, zwanzig Zusagen und die Liste der verbotenen Muster.
+Krypto-Festlegungen, das Datenmodell, dreiundzwanzig Zusagen und die Liste der verbotenen Muster.
 **Wer etwas ändert, liest zuerst diese Datei.**
 
 Vier Regeln, die nicht verhandelbar sind:

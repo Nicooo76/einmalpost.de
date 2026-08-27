@@ -14,6 +14,29 @@ namespace Einmalpost;
  */
 final class View
 {
+    /**
+     * Wo die private Gestaltung liegt.
+     *
+     * Sie gehört nicht ins Repository (Abschnitt 12) - ein Klon hat sie also
+     * nicht. Damit die Vorlage sie dann auch nicht anfordert, wird hier
+     * nachgesehen, statt den Verweis bedingungslos zu setzen.
+     *
+     * Der Pfad steht als Eigenschaft und nicht fest in der Vorlage, damit ein
+     * Test beide Fälle prüfen kann, ohne die wirkliche Datei zu verschieben.
+     * Sie ist nirgends versioniert; ginge ein Testlauf mittendrin zu Ende,
+     * wäre sie nur noch auf dem Server vorhanden - und der nächste Abgleich
+     * mit --delete löschte sie auch dort.
+     */
+    public static ?string $gestaltungsdatei = null;
+
+    /**
+     * Ist die private Gestaltung vorhanden?
+     */
+    public static function hatGestaltung(): bool
+    {
+        return is_file(self::$gestaltungsdatei ?? dirname(__DIR__) . '/public/assets/theme.css');
+    }
+
     public static function createPage(string $nonce, string $sprache = Sprache::DEUTSCH): string
     {
         if ($sprache === Sprache::ENGLISCH) {

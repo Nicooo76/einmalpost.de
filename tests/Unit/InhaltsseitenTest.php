@@ -119,6 +119,46 @@ final class InhaltsseitenTest extends TestCase
         }
     }
 
+    /**
+     * Auf der Anzeigeseite darf nichts stehen, was das Fragment ersetzt.
+     *
+     * Die Sprungmarke ist der erste Tab-Stopp, und ihr Ziel schreibt beim
+     * Betätigen `#hauptbereich` in die Adresse - der Schlüssel wäre damit weg,
+     * und der Empfänger stünde vor einem scheinbar kaputten Link. Für den
+     * Sprachwechsel im Fußbereich gilt dasselbe; beide fehlen dort mit Absicht.
+     */
+    public function testDieAnzeigeseiteTraegtNichtsWasDasFragmentErsetzt(): void
+    {
+        $anzeige = $this->seite('/s/AAAAAAAAAAAAAAAAAAAAAA');
+
+        self::assertStringNotContainsString(
+            'skip-link',
+            $anzeige,
+            'Die Sprungmarke ersetzt beim Betätigen das Fragment - und damit den Schlüssel.'
+        );
+
+        self::assertStringNotContainsString('site-footer__sprache', $anzeige);
+
+        // Gegenprobe: Auf einer gewöhnlichen Seite gehört beides hin. Ohne sie
+        // wäre der Test auch dann grün, wenn die Sprungmarke überall fehlte.
+        $start = $this->seite('/');
+
+        self::assertStringContainsString('skip-link', $start);
+        self::assertStringContainsString('site-footer__sprache', $start);
+    }
+
+    /**
+     * Und was bleibt, muss in der Sprache der Seite stehen.
+     */
+    public function testDieSprungmarkeStehtInDerSpracheDerSeite(): void
+    {
+        self::assertStringContainsString('Zum Inhalt springen', $this->seite('/'));
+        self::assertStringContainsString('Skip to content', $this->seite('/en'));
+
+        self::assertStringContainsString('content="de_DE"', $this->seite('/'));
+        self::assertStringContainsString('content="en_US"', $this->seite('/en'));
+    }
+
     public function testDerFussbereichVerweistAufDenQuellcode(): void
     {
         foreach (['/', '/impressum', '/sicherheit', '/s/AAAAAAAAAAAAAAAAAAAAAA'] as $pfad) {

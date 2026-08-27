@@ -32,6 +32,55 @@ test.describe('Grundlauf', () => {
         expect(zweiter.text).toContain('GIBT ES NICHT MEHR');
     });
 
+    test('Zusage 3 am Zweck: ein Doppelklick verliert das Geheimnis nicht', async ({ page }) => {
+        // Der Server hält die Zusage auch ohne Riegel - DELETE ... RETURNING
+        // gibt genau einem der beiden Abrufe den Inhalt. Im Browser liefen
+        // aber beide in dieselbe Anzeige: Die 404-Antwort des zweiten blendete
+        // den gerade angezeigten Klartext wieder aus. Für den Empfänger war
+        // das Geheimnis damit verloren, obwohl es korrekt ausgeliefert wurde.
+        const geheimnis = await erzeugeGeheimnis(page, 'zweimal geklickt');
+
+        await page.goto('about:blank');
+        await page.goto(geheimnis.pfad);
+
+        // Zwei Klicks so schnell hintereinander, wie ein ungeduldiger Mensch
+        // sie auslöst - ohne auf eine Antwort zu warten.
+        await Promise.all([
+            page.click('#anzeigen'),
+            page.click('#anzeigen', { force: true }).catch(() => {})
+        ]);
+
+        await page.waitForSelector('#ergebnis:not([hidden])', { timeout: 30000 });
+
+        // Und die Anzeige bleibt stehen, statt von einer zweiten Antwort
+        // überschrieben zu werden.
+        await page.waitForTimeout(2000);
+
+        expect(await page.textContent('#inhalt')).toBe('zweimal geklickt');
+        await expect(page.locator('#ergebnis')).toBeVisible();
+        await expect(page.locator('#fortgeschrieben')).toBeHidden();
+
+        // Auf dem Server ist es trotzdem genau einmal verbraucht.
+        expect(existiert(geheimnis.id)).toBe(false);
+    });
+
+    test('während des Abrufs sind die Knöpfe gesperrt', async ({ page }) => {
+        const geheimnis = await erzeugeGeheimnis(page, 'einen Moment bitte');
+
+        await page.goto('about:blank');
+        await page.goto(geheimnis.pfad);
+
+        // Vor dem Klick offen ...
+        expect(await page.locator('#anzeigen').isDisabled()).toBe(false);
+
+        await page.click('#anzeigen');
+        await page.waitForSelector('#ergebnis:not([hidden])', { timeout: 30000 });
+
+        // ... und danach wieder offen. Bliebe die Seite gesperrt, käme der
+        // Empfänger nach einem Fehler an nichts mehr heran.
+        expect(await page.locator('#anzeigen').isDisabled()).toBe(false);
+    });
+
     test('Zusage 2: der Klartext liegt nie in der Datenbank', async ({ page }) => {
         const klartext = 'ZeichenketteDieNirgendsSonstVorkommt-9c1f4b7a';
 

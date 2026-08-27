@@ -131,27 +131,49 @@ CREATE TABLE secrets (
 ) ENGINE=InnoDB;
 ```
 
-### Warum `MEDIUMBLOB` und nicht `VARBINARY(65536)`
+### Warum `LONGBLOB`
 
-Ursprünglich war `VARBINARY(65536)` vorgesehen. Das ist in MariaDB nicht anlegbar, und zwar
-auf beiden Maschinen unterschiedlich nicht anlegbar (gemessen am 2026-08-26):
+Ursprünglich war `VARBINARY(65536)` vorgesehen, weil der Dienst zunächst nur Text bis 64 KB
+aufnehmen sollte. Beides ist überholt: Seit den Anhängen sind es **16 MB**, und die Spalte
+ist `LONGBLOB`.
+
+Der Weg dorthin ist trotzdem festgehalten, weil er eine Falle beschreibt, die wiederkommen
+kann. `VARBINARY(65536)` ist in MariaDB nicht anlegbar, und zwar auf beiden Maschinen
+**unterschiedlich** nicht anlegbar (gemessen am 2026-08-26):
 
 - **Entwicklungsmaschine** (12.3.2, `sql_mode` enthält `STRICT_TRANS_TABLES`):
   `ERROR 1074 — Column length too big for column 'payload' (max = 65532)`. Die Tabelle
   entsteht nicht.
 - **Zielserver** (10.11.14, `sql_mode` **ohne** Strict): Die Anweisung wird angenommen und
-  die Spalte still zu `mediumblob` umgewandelt. In der Produktion stünde damit eine andere
-  Spalte, als das Repository behauptet.
-- `VARBINARY(65532)` scheitert auf **beiden** an `ERROR 1118 — Row size too large`, weil das
-  InnoDB-Zeilenlimit von 65535 Byte für die ganze Zeile gilt.
+  die Spalte still umgewandelt. In der Produktion stünde damit eine andere Spalte, als das
+  Repository behauptet.
 
-`MEDIUMBLOB` schreibt hin, was der Zielserver ohnehin daraus macht. Der `CHECK`-Constraint
-hält die vorgegebene 64-KB-Grenze fest — jetzt in der Datenbank und nicht nur in PHP.
-Geprüft: 65536 Byte werden angenommen, 65537 abgelehnt.
+Merksatz: Was hier scheitert, wird dort stillschweigend zurechtgebogen. Deshalb steht in
+`db/schema.sql`, was der Server ohnehin daraus macht, und deshalb gibt es
+`tools/schema-pruefen.php`.
 
-Der Payload kann strukturell ohnehin nie größer als **65.308 Byte** werden: 12 Byte IV +
-höchstens 255 Blöcke à 256 Byte + 16 Byte Tag. Der nächste Block läge bei 65.564 Byte und
-damit über der Grenze.
+**Warum `LONGBLOB` und nicht `MEDIUMBLOB`:** `MEDIUMBLOB` endet bei 16.777.215 Byte. Die
+Grenze des Dienstes liegt bei 16.500.000 Byte — das wären 98,3 % der Kapazität. Ein Format,
+das so dicht an seiner Obergrenze arbeitet, verzeiht keine Erweiterung.
+
+Der `CHECK`-Constraint hält die 16-MB-Grenze in der Datenbank fest, nicht nur in PHP.
+
+### Wie groß der payload höchstens wird
+
+Nachgerechnet, nicht geschätzt (`BLOCK` = 256, `NUTZLAST_MAX_BYTES` = 16.000.000):
+
+| | |
+|---|---|
+| Text, ohne Dateinamen | 16.000.301 Byte |
+| Datei mit 255-Byte-Namen | 16.000.557 Byte |
+| Datei mit dem längsten Namen (65.535 Byte) | **16.065.837 Byte** |
+
+Der ungünstigste Fall liegt damit **434.163 Byte unter** `PAYLOAD_MAX_BYTES`. Zusammen:
+1 Byte Version + 16 Byte Salz + 12 Byte IV + der auf 256 aufgefüllte Klartext + 16 Byte Tag.
+
+Als base64url im JSON-Rumpf werden daraus rund **21,4 MB** — deshalb steht `post_max_size`
+auf dem Server auf 32M, und deshalb gehört diese Einstellung in die FPM-Konfiguration und
+nicht in eine `.user.ini` (die liest PHP erst, wenn der Rumpf schon verworfen ist).
 
 ### `sql_mode` wird pro Verbindung gesetzt
 
@@ -304,7 +326,7 @@ gilt, ist kein Nonce.
 
 ## 11. Betrieb
 
-- `payload` auf **64 KB** begrenzt, **serverseitig hart geprüft**
+- `payload` auf **16,5 MB** begrenzt, **serverseitig hart geprüft** und als CHECK in der Datenbank
 - Rate-Limit wie in Abschnitt 5 beschrieben
 - Aufräumskript für abgelaufene Zeilen als **Cron**, zusätzlich ein **MariaDB-Event** als
   zweites Netz. Der Test zu Zusage 10 prüft den Zustand des Event-Schedulers und wird rot,
@@ -335,7 +357,7 @@ gilt, ist kein Nonce.
 Die Technik stand und war abgenommen, bevor die Gestaltung dazukam. Diese Reihenfolge ist
 der Grund, warum ein Gestaltungsfehler jetzt nur noch kosmetisch sein kann.
 
-**Die oberste Regel: Keine Änderung an der Gestaltung darf eine der zwanzig Zusagen brechen.**
+**Die oberste Regel: Keine Änderung an der Gestaltung darf eine der Zusagen brechen.**
 Wo Aussehen und Zusage kollidieren, gewinnt die Zusage — und es wird gefragt, nicht
 entschieden.
 
@@ -439,7 +461,7 @@ Diese Sitzung baut den Dienst und die Tests der ersten beiden Ebenen. **Die Abna
 in einer eigenen Sitzung mit einem separaten Prüfauftrag**, durch ein Modell, das diesen Code
 nicht geschrieben hat und ihm nicht glaubt.
 
-Diese Prüfsitzung wird **jede der zwanzig Zusagen einzeln absichtlich sabotieren** und dabei
+Diese Prüfsitzung wird **jede der dreiundzwanzig Zusagen einzeln absichtlich sabotieren** und dabei
 messen, ob die hier gebauten Tests die Sabotage bemerken. Ein Test, der nach dem Ausbau der
 Schutzmaßnahme, die er angeblich prüft, weiterhin grün bleibt, zählt als Fehlschlag — nicht
 als Test.

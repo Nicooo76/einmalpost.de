@@ -35,6 +35,7 @@
             qrZeigen: 'ALS QR-CODE',
             qrVerstecken: 'QR-CODE AUSBLENDEN',
             qrFehler: 'Der QR-Code ließ sich nicht erzeugen. Der Link darüber gilt trotzdem.',
+            qrBeschriftung: 'QR-Code mit dem Link',
             erzeugen: 'LINK ERZEUGEN',
             verschluesselt: 'WIRD VERSCHLÜSSELT …'
         },
@@ -51,6 +52,7 @@
             qrZeigen: 'AS QR CODE',
             qrVerstecken: 'HIDE QR CODE',
             qrFehler: 'The QR code could not be created. The link above is still valid.',
+            qrBeschriftung: 'QR code containing the link',
             erzeugen: 'CREATE LINK',
             verschluesselt: 'ENCRYPTING …'
         }
@@ -226,7 +228,7 @@
                 qrFlaeche.removeChild(qrFlaeche.firstChild);
             }
 
-            qrFlaeche.appendChild(qr.alsSvg(matrix, 240));
+            qrFlaeche.appendChild(qr.alsSvg(matrix, 240, T.qrBeschriftung));
             qrBereich.hidden = false;
             qrZeigen.textContent = T.qrVerstecken;
         } catch (fehler) {

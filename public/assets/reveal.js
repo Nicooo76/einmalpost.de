@@ -20,6 +20,44 @@
     // blitzt der Hinweis nur auf.
     var LADEHINWEIS_AB_MS = 300;
 
+    // Die Zustände stehen als Text in der Seite; nur diese wenigen Meldungen
+    // entstehen im Skript. Ohne sie stünde auf der englischen Anzeigeseite
+    // Deutsch - ausgerechnet in dem Satz, der erklärt, warum der Inhalt trotz
+    // Fehlschlag verbraucht ist.
+    var TEXTE = {
+        de: {
+            istDatei: 'Das ist eine Datei — sie wird zum Herunterladen angeboten.',
+            angezeigtGeloescht: 'ANGEZEIGT UND GELÖSCHT',
+            kopierenGescheitert: 'Das Kopieren war nicht möglich, deshalb wird der Text angezeigt. '
+                + 'Er wäre sonst verloren gewesen.',
+            passphraseFehlt: 'Bitte geben Sie die Passphrase ein.',
+            kopiert: 'KOPIERT',
+            kopierenGeht: 'KOPIEREN NICHT MÖGLICH — BITTE VON HAND MARKIEREN'
+        },
+        en: {
+            istDatei: 'This is a file — it is offered as a download.',
+            angezeigtGeloescht: 'SHOWN AND DELETED',
+            kopierenGescheitert: 'Copying was not possible, so the text is shown instead. '
+                + 'It would otherwise have been lost.',
+            passphraseFehlt: 'Please enter the passphrase.',
+            kopiert: 'COPIED',
+            kopierenGeht: 'COPYING NOT POSSIBLE — PLEASE SELECT BY HAND'
+        }
+    };
+
+    var T = TEXTE[document.body.dataset.sprache === 'en' ? 'en' : 'de'];
+
+    // Sperre gegen den zweiten Klick.
+    //
+    // Ohne sie schickt ein Doppelklick zwei Abrufe los. Der Server verhält
+    // sich richtig - genau einer bekommt den Inhalt, der andere eine
+    // 404-Antwort -, aber im Browser laufen beide in dieselbe Anzeige: Die
+    // Absage des zweiten blendet den gerade angezeigten Klartext wieder aus.
+    // Für den Empfänger ist das Geheimnis dann verloren, obwohl es korrekt
+    // ausgeliefert wurde. Begünstigt wird das dadurch, dass der Ladehinweis
+    // erst nach 300 ms erscheint - bis dahin sieht ein Klick nach nichts aus.
+    var laeuft = false;
+
     var abschnitte = [
         'bestaetigung', 'passphraseAbfrage', 'ergebnis', 'nurKopiertFertig',
         'unvollstaendig', 'fehlgeschlagen', 'fortgeschrieben', 'zuVieleAnfragen'
@@ -179,6 +217,38 @@
      * Führt einen Wunsch aus - entweder sofort oder nach der Passphrase.
      */
     async function fuehreAus(wunsch, passphrase) {
+        if (laeuft) {
+            return;
+        }
+
+        laeuft = true;
+        sperreKnoepfe(true);
+
+        try {
+            await fuehreAusIntern(wunsch, passphrase);
+        } finally {
+            laeuft = false;
+            sperreKnoepfe(false);
+        }
+    }
+
+    /**
+     * Sperrt die Knöpfe, die einen Abruf auslösen können, für die Dauer des
+     * Abrufs. Das Freigeben steht in einem finally - bliebe die Seite nach
+     * einem Fehler gesperrt, käme der Empfänger an sein Geheimnis nicht mehr
+     * heran, obwohl es noch da ist.
+     */
+    function sperreKnoepfe(zu) {
+        ['anzeigen', 'nurKopieren', 'passphraseAbsenden'].forEach(function (id) {
+            var knopf = document.getElementById(id);
+
+            if (knopf) {
+                knopf.disabled = zu;
+            }
+        });
+    }
+
+    async function fuehreAusIntern(wunsch, passphrase) {
         var ergebnis = await holeUndEntschluessele(passphrase);
 
         if (ergebnis === null) {
@@ -195,7 +265,7 @@
         if (ergebnis.istDatei) {
             // Eine Datei lässt sich nicht in die Zwischenablage legen.
             stelleDar(ergebnis);
-            zeigeFehler('Das ist eine Datei — sie wird zum Herunterladen angeboten.');
+            zeigeFehler(T.istDatei);
 
             return;
         }
@@ -207,12 +277,9 @@
             // Die Zwischenablage war nicht erreichbar. Der Text darf jetzt
             // nicht verlorengehen - er ist auf dem Server schon gelöscht.
             // Also doch anzeigen, und sagen warum.
-            statuszeile.textContent = 'ANGEZEIGT UND GELÖSCHT';
+            statuszeile.textContent = T.angezeigtGeloescht;
             stelleDar(ergebnis);
-            zeigeFehler(
-                'Das Kopieren war nicht möglich, deshalb wird der Text angezeigt. '
-                + 'Er wäre sonst verloren gewesen.'
-            );
+            zeigeFehler(T.kopierenGescheitert);
         }
     }
 
@@ -254,7 +321,7 @@
         var passphrase = passphraseEingabe.value;
 
         if (passphrase === '') {
-            zeigeFehler('Bitte geben Sie die Passphrase ein.');
+            zeigeFehler(T.passphraseFehlt);
 
             return;
         }
@@ -273,9 +340,9 @@
     kopieren.addEventListener('click', async function () {
         try {
             await navigator.clipboard.writeText(inhalt.textContent);
-            kopieren.textContent = 'KOPIERT';
+            kopieren.textContent = T.kopiert;
         } catch (fehler) {
-            kopieren.textContent = 'KOPIEREN NICHT MÖGLICH — BITTE VON HAND MARKIEREN';
+            kopieren.textContent = T.kopierenGeht;
         }
     });
 

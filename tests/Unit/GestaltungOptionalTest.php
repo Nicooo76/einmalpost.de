@@ -9,6 +9,7 @@ use Einmalpost\Http\Router;
 use Einmalpost\RateLimiter;
 use Einmalpost\SecretStore;
 use Einmalpost\Tests\Support\ExplodierenderZugang;
+use Einmalpost\View;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,64 +19,37 @@ use PHPUnit\Framework\TestCase;
  *
  * Dann darf die Seite sie auch nicht anfordern. Ein `<link>` auf eine Datei,
  * die es dort nie geben wird, erzeugt bei jedem Seitenaufruf einen 404 - in
- * der Konsole jedes Besuchers, in jedem Protokoll, bei jedem Klon. Das ist
- * kein Schönheitsfehler: Es ist eine Anfrage, die niemand beantworten kann,
- * und sie steht in jeder Fassung, die wir veröffentlichen.
+ * der Konsole jedes Besuchers, in jedem Protokoll, bei jedem Klon.
  *
- * Aufgefallen ist das nicht beim Lesen, sondern in der fortlaufenden Prüfung -
- * die läuft ohne die Gestaltung, und der Konsolentest wurde rot.
+ * Aufgefallen ist das nicht beim Lesen, sondern in der fortlaufenden Prüfung:
+ * Die läuft ohne die Gestaltung, und der Konsolentest wurde rot.
+ *
+ * Geprüft wird über View::$gestaltungsdatei, nicht durch Verschieben der
+ * wirklichen Datei. Die ist nirgends versioniert - ginge ein Testlauf
+ * mittendrin zu Ende, wäre sie nur noch auf dem Server vorhanden, und der
+ * nächste Abgleich mit --delete löschte sie auch dort.
  */
 final class GestaltungOptionalTest extends TestCase
 {
-    private string $vorlage = '';
-
-    private string $beiseite = '';
-
-    /** Wahr, wenn dieser Test die Datei selbst angelegt hat. */
-    private bool $selbstAngelegt = false;
+    private string $spielwiese = '';
 
     protected function setUp(): void
     {
-        $this->vorlage  = dirname(__DIR__, 2) . '/public/assets/theme.css';
-        $this->beiseite = $this->vorlage . '.beiseite-fuer-den-test';
+        $this->spielwiese = (string) tempnam(sys_get_temp_dir(), 'gestaltung');
+        unlink($this->spielwiese);
+        mkdir($this->spielwiese, 0o700, true);
     }
 
     protected function tearDown(): void
     {
-        if (is_file($this->beiseite)) {
-            rename($this->beiseite, $this->vorlage);
-        }
+        View::$gestaltungsdatei = null;
 
-        if ($this->selbstAngelegt && is_file($this->vorlage)) {
-            unlink($this->vorlage);
-            $this->selbstAngelegt = false;
+        if ($this->spielwiese !== '' && is_dir($this->spielwiese)) {
+            exec(sprintf('rm -rf %s', escapeshellarg($this->spielwiese)));
         }
     }
 
-    /**
-     * Sorgt dafür, dass es eine theme.css gibt - notfalls eine eigene.
-     *
-     * Auf einem Entwicklungsrechner liegt sie da. In der fortlaufenden
-     * Prüfung nie: Das Aussehen gehört nicht ins Repository. Ein Test, der
-     * ihr Vorhandensein voraussetzt, wäre dort rot - und zwar nicht, weil
-     * etwas kaputt ist, sondern weil er die falsche Annahme trifft.
-     */
-    private function sorgeFuerThemeCss(): void
-    {
-        if (is_file($this->vorlage)) {
-            return;
-        }
-
-        file_put_contents($this->vorlage, "/* nur für diesen Test */\n:root { --probe: 1; }\n");
-        $this->selbstAngelegt = true;
-    }
-
-    /**
-     * Die Startseite, gerendert wie im Betrieb - über den Router, nicht an
-     * der Anwendung vorbei. Der Datenbankzugang wirft bei jeder Berührung,
-     * denn eine Inhaltsseite darf ihn gar nicht erst anfassen.
-     */
-    private function kopfbereich(): string
+    private function startseite(): string
     {
         $zugang = new ExplodierenderZugang();
 
@@ -87,13 +61,11 @@ final class GestaltungOptionalTest extends TestCase
         return $router->dispatch(new Request('GET', '/', '', '203.0.113.7'))->body;
     }
 
-    public function testOhneTheseCssStehtKeinVerweisDarauf(): void
+    public function testOhneGestaltungStehtKeinVerweisDarauf(): void
     {
-        $this->sorgeFuerThemeCss();
+        View::$gestaltungsdatei = $this->spielwiese . '/gibt-es-nicht.css';
 
-        rename($this->vorlage, $this->beiseite);
-
-        $html = $this->kopfbereich();
+        $html = $this->startseite();
 
         self::assertStringNotContainsString(
             '/assets/theme.css',
@@ -107,13 +79,47 @@ final class GestaltungOptionalTest extends TestCase
         self::assertStringContainsString('/assets/theme-default.css', $html);
     }
 
-    public function testMitThemeCssStehtDerVerweisDa(): void
+    public function testMitGestaltungStehtDerVerweisDa(): void
     {
-        $this->sorgeFuerThemeCss();
+        $datei = $this->spielwiese . '/theme.css';
+        file_put_contents($datei, ":root { --probe: 1; }\n");
 
-        $html = $this->kopfbereich();
+        View::$gestaltungsdatei = $datei;
+
+        $html = $this->startseite();
 
         self::assertStringContainsString('/assets/theme.css', $html);
         self::assertStringContainsString('/assets/theme-default.css', $html);
+    }
+
+    /**
+     * Die wirkliche Datei wird von diesem Test nie angefasst. Ohne diese
+     * Zusicherung wäre der Umbau von oben eine Behauptung.
+     */
+    public function testDieWirklicheGestaltungBleibtUnberuehrt(): void
+    {
+        $echt = dirname(__DIR__, 2) . '/public/assets/theme.css';
+        $vorher = is_file($echt) ? (string) md5_file($echt) : 'nicht vorhanden';
+
+        View::$gestaltungsdatei = $this->spielwiese . '/gibt-es-nicht.css';
+        $this->startseite();
+
+        $nachher = is_file($echt) ? (string) md5_file($echt) : 'nicht vorhanden';
+
+        self::assertSame($vorher, $nachher, 'Der Test hat die wirkliche theme.css verändert.');
+    }
+
+    /**
+     * Und ohne gesetzte Eigenschaft gilt der wirkliche Pfad - sonst hinge der
+     * Betrieb an einer Testeinstellung.
+     */
+    public function testOhneEinstellungGiltDerWirklichePfad(): void
+    {
+        View::$gestaltungsdatei = null;
+
+        self::assertSame(
+            is_file(dirname(__DIR__, 2) . '/public/assets/theme.css'),
+            View::hatGestaltung()
+        );
     }
 }

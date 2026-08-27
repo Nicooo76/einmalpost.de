@@ -130,6 +130,65 @@ test.describe('Sprachfassungen', () => {
         expect(await page.textContent('#fehler')).toContain('Bitte geben Sie einen Text ein');
     });
 
+    test('auch die Meldungen der Anzeigeseite sind übersetzt', async ({ page }) => {
+        // create.js hatte von Anfang an ein Wörterbuch, reveal.js nicht -
+        // auf der englischen Anzeigeseite stand deshalb Deutsch. Betroffen war
+        // ausgerechnet der Satz, der erklärt, warum der Inhalt trotz
+        // Fehlschlag verbraucht ist.
+        await page.goto('/en');
+        await page.fill('#geheimnis', 'english reveal messages');
+        await page.click('#absenden');
+        await page.waitForSelector('#ergebnis:not([hidden])', { timeout: 30000 });
+
+        const adresse = new URL(await page.textContent('#link'));
+
+        await page.goto('about:blank');
+        await page.goto(adresse.pathname + adresse.hash);
+
+        expect(await page.getAttribute('html', 'lang')).toBe('en');
+
+        await page.click('#anzeigen');
+        await page.waitForSelector('#ergebnis:not([hidden])', { timeout: 30000 });
+
+        // Der Kopieren-Knopf setzt seine Beschriftung im Skript.
+        await page.click('#kopieren');
+        await page.waitForFunction(
+            () => document.getElementById('kopieren').textContent.trim() !== 'COPY',
+            null,
+            { timeout: 15000 }
+        );
+
+        const beschriftung = (await page.textContent('#kopieren')).trim();
+
+        expect(beschriftung).not.toContain('KOPIERT');
+        expect(beschriftung).not.toContain('BITTE VON HAND');
+        expect(beschriftung).toMatch(/COPIED|COPYING NOT POSSIBLE/);
+    });
+
+    test('die Passphrase-Abfrage meldet sich auf Englisch', async ({ page }) => {
+        await page.goto('/en');
+        await page.fill('#geheimnis', 'guarded by a passphrase');
+        await page.fill('#passphrase', 'umbrella-7');
+        await page.click('#absenden');
+        await page.waitForSelector('#ergebnis:not([hidden])', { timeout: 30000 });
+
+        const adresse = new URL(await page.textContent('#link'));
+
+        await page.goto('about:blank');
+        await page.goto(adresse.pathname + adresse.hash);
+        await page.click('#anzeigen');
+        await page.waitForSelector('#passphraseAbfrage:not([hidden])', { timeout: 20000 });
+
+        // Leere Eingabe: Die Meldung kommt aus dem Skript.
+        await page.click('#passphraseAbsenden');
+        await page.waitForSelector('#fehler:not([hidden])');
+
+        const meldung = await page.textContent('#fehler');
+
+        expect(meldung).toContain('Please enter the passphrase');
+        expect(meldung).not.toContain('Bitte geben Sie');
+    });
+
     test('die englische Auszeichnung passt zur englischen Seite', async ({ page }) => {
         await page.goto('/en');
 

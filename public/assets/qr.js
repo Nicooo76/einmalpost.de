@@ -507,8 +507,12 @@ var qr = (function () {
      *
      * Kein innerHTML: Jedes Element entsteht über createElementNS, wie
      * überall in diesem Projekt.
+     *
+     * Die Textalternative kommt von außen: Der Kodierer weiß nicht, in
+     * welcher Sprache die Seite steht, und ein fest deutscher Text stünde
+     * sonst auch auf der englischen Fassung.
      */
-    function alsSvg(matrix, kantenlaenge) {
+    function alsSvg(matrix, kantenlaenge, textalternative) {
         var NS = 'http://www.w3.org/2000/svg';
         var rand = 4;                       // Ruhezone, nach Spezifikation
         var gesamt = matrix.length + rand * 2;
@@ -518,7 +522,7 @@ var qr = (function () {
         svg.setAttribute('width', String(kantenlaenge));
         svg.setAttribute('height', String(kantenlaenge));
         svg.setAttribute('role', 'img');
-        svg.setAttribute('aria-label', 'QR-Code mit dem Link');
+        svg.setAttribute('aria-label', textalternative || 'QR-Code mit dem Link');
 
         var grund = document.createElementNS(NS, 'rect');
         grund.setAttribute('width', String(gesamt));

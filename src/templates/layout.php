@@ -57,7 +57,7 @@ $englischerWeg = $fassungen['en'];
 <meta property="og:type" content="website">
 <meta property="og:title" content="<?= $h($meta->title) ?>">
 <meta property="og:description" content="<?= $h($meta->description) ?>">
-<meta property="og:locale" content="de_DE">
+<meta property="og:locale" content="<?= $englisch ? 'en_US' : 'de_DE' ?>">
 <?php endif; ?>
 <?php /* Deutsch unter /, Englisch unter /en/. */ ?>
 <link rel="alternate" hreflang="de" href="<?= $h($deutscherWeg) ?>">
@@ -71,17 +71,25 @@ $englischerWeg = $fassungen['en'];
  * und in jedem Protokoll. Ohne theme.css bleibt die Seite schmucklos, aber
  * vollständig bedienbar; das stellt theme-default.css darüber sicher.
  */ ?>
-<?php if (is_file(dirname(__DIR__, 2) . '/public/assets/theme.css')): ?>
+<?php if (\Einmalpost\View::hatGestaltung()): ?>
 <link rel="stylesheet" href="/assets/theme.css">
 <?php endif; ?>
 <?= $kopfExtra ?>
 </head>
 <body class="page <?= $h($meta->bodyClass) ?>" data-sprache="<?= $h($meta->sprache) ?>">
 
-<a class="skip-link" href="#hauptbereich">Zum Inhalt springen</a>
+<?php /* Auf der Anzeigeseite keine Sprungmarke: Sie ist der erste
+         Tab-Stopp, und ihr Ziel ersetzt beim Betätigen das Fragment - also
+         den Schlüssel. Der Empfänger stünde danach vor einem scheinbar
+         kaputten Link. Dieselbe Falle wie beim Sprachwechsel weiter unten.
+         Verzichtbar ist sie dort, weil die Anzeigeseite karg ist: Bis zum
+         Anzeigen-Knopf liegen nur zwei Elemente. */ ?>
+<?php if ($meta->bodyClass !== 'page--reveal'): ?>
+<a class="skip-link" href="#hauptbereich"><?= $englisch ? 'Skip to content' : 'Zum Inhalt springen' ?></a>
+<?php endif; ?>
 
 <header class="site-header">
-    <a class="brand" href="/">
+    <a class="brand" href="<?= $englisch ? '/en' : '/' ?>">
         <span class="brand__part brand__part--first">EINMAL</span><span class="brand__part brand__part--second">POST</span>
     </a>
 </header>
