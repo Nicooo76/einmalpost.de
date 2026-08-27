@@ -376,6 +376,48 @@ var qr = (function () {
      * Bewertung nach den vier Regeln der Spezifikation. Je kleiner, desto
      * besser lesbar - Scanner tun sich mit gleichförmigen Flächen schwer.
      */
+    /**
+     * Zählt die Stellen, an denen eine Folge einem Suchmuster gleicht.
+     *
+     * Je Stelle muss die **ganze** Folge zu einem der beiden Muster passen.
+     * Wird stattdessen Position für Position gegen beide zugleich geprüft,
+     * gilt auch eine Mischform als Treffer, obwohl sie keinem von beiden
+     * entspricht - die Strafe fiele zu hoch aus und die Maskenwahl damit
+     * systematisch schlechter.
+     *
+     * Steht als eigene Funktion da, weil sie sich nur so für sich prüfen
+     * lässt: In der Gesamtbewertung überlagern die anderen drei Regeln den
+     * Unterschied.
+     */
+    function zaehleSuchmuster(m) {
+        var MUSTER = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
+        var UMGEKEHRT = MUSTER.slice().reverse();
+        var groesse = m.length;
+        var treffer = 0;
+        var i, j, k;
+
+        for (i = 0; i < groesse; i++) {
+            for (j = 0; j + 10 < groesse; j++) {
+                var waagerechtVor = true;
+                var waagerechtZurueck = true;
+                var senkrechtVor = true;
+                var senkrechtZurueck = true;
+
+                for (k = 0; k < 11; k++) {
+                    if (m[i][j + k] !== MUSTER[k]) { waagerechtVor = false; }
+                    if (m[i][j + k] !== UMGEKEHRT[k]) { waagerechtZurueck = false; }
+                    if (m[j + k][i] !== MUSTER[k]) { senkrechtVor = false; }
+                    if (m[j + k][i] !== UMGEKEHRT[k]) { senkrechtZurueck = false; }
+                }
+
+                if (waagerechtVor || waagerechtZurueck) { treffer++; }
+                if (senkrechtVor || senkrechtZurueck) { treffer++; }
+            }
+        }
+
+        return treffer;
+    }
+
     function bewerte(m) {
         var groesse = m.length;
         var punkte = 0;
@@ -415,27 +457,7 @@ var qr = (function () {
         }
 
         // Regel 3: Muster, das einem Suchmuster ähnelt.
-        var muster = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
-        var musterUmgekehrt = muster.slice().reverse();
-
-        for (i = 0; i < groesse; i++) {
-            for (j = 0; j < groesse - 10; j++) {
-                var waagerecht = true;
-                var senkrecht = true;
-
-                for (k = 0; k < 11; k++) {
-                    if (m[i][j + k] !== muster[k] && m[i][j + k] !== musterUmgekehrt[k]) {
-                        waagerecht = false;
-                    }
-                    if (m[j + k][i] !== muster[k] && m[j + k][i] !== musterUmgekehrt[k]) {
-                        senkrecht = false;
-                    }
-                }
-
-                if (waagerecht) { punkte += 40; }
-                if (senkrecht) { punkte += 40; }
-            }
-        }
+        punkte += 40 * zaehleSuchmuster(m);
 
         // Regel 4: Abweichung vom hälftigen Verhältnis hell zu dunkel.
         var dunkel = 0;
@@ -604,6 +626,8 @@ var qr = (function () {
         alsSvg: alsSvg,
         versionFuer: versionFuer,
         // Für die Prüfung zugänglich.
+        _bewerte: bewerte,
+        _zaehleSuchmuster: zaehleSuchmuster,
         _fehlerkorrektur: fehlerkorrektur,
         _codewoerter: codewoerter,
         _formatBits: formatBits

@@ -104,6 +104,71 @@ test.describe('QR-Kodierer', () => {
      * dort lässt sich diese Zusicherung nicht prüfen, und das steht hier,
      * statt in einem stillen Übersprung zu verschwinden.
      */
+    test('Bewertungsregel 3 zählt nur vollständige Suchmuster', async ({ page }) => {
+        // Die Regel bestraft Folgen, die einem Suchmuster ähneln. Je Stelle
+        // muss die **ganze** Folge zu einem der beiden Muster passen. Wird
+        // stattdessen Position für Position gegen beide zugleich geprüft,
+        // gilt auch eine Mischform als Treffer - die Strafe fällt zu hoch
+        // aus und die Maskenwahl wird systematisch schlechter.
+        //
+        // Geprüft wird die Regel für sich. In der Gesamtbewertung überlagern
+        // die anderen drei Regeln den Unterschied so weit, dass ein Test
+        // darauf auch mit dem Fehler grün bliebe.
+        await page.goto('/');
+
+        const ergebnis = await page.evaluate(() => {
+            const MUSTER = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
+            const UMGEKEHRT = MUSTER.slice().reverse();
+
+            const leer = () => Array.from({ length: 11 }, () => new Array(11).fill(0));
+            const mitZeile = (folge) => {
+                const m = leer();
+                for (let k = 0; k < 11; k++) { m[0][k] = folge[k]; }
+                return m;
+            };
+
+            // Vorn wie das Muster, hinten wie die Umkehrung - und damit weder
+            // das eine noch das andere.
+            const misch = MUSTER.slice(0, 7).concat(UMGEKEHRT.slice(7));
+
+            return {
+                muster: window.qr._zaehleSuchmuster(mitZeile(MUSTER)),
+                umgekehrt: window.qr._zaehleSuchmuster(mitZeile(UMGEKEHRT)),
+                misch: window.qr._zaehleSuchmuster(mitZeile(misch)),
+                leer: window.qr._zaehleSuchmuster(leer()),
+                istMisch: misch.join('') !== MUSTER.join('') && misch.join('') !== UMGEKEHRT.join('')
+            };
+        });
+
+        // Die Mischform ist wirklich eine - sonst prüfte der Test nichts.
+        expect(ergebnis.istMisch).toBe(true);
+
+        // Beide echten Muster zählen, in beide Richtungen gleich.
+        expect(ergebnis.muster).toBe(1);
+        expect(ergebnis.umgekehrt).toBe(1);
+
+        // Die Mischform zählt nicht. Mit der früheren Prüfung war sie ein
+        // Treffer - genau daran wird dieser Test rot, wenn jemand sie
+        // wiederherstellt.
+        expect(ergebnis.misch).toBe(0);
+        expect(ergebnis.leer).toBe(0);
+    });
+
+    test('in einem wirklichen QR-Code findet die Regel die Suchmuster', async ({ page }) => {
+        await page.goto('/');
+
+        const treffer = await page.evaluate(() => {
+            const matrix = window.qr.erzeuge('https://einmalpost.de/s/AAAAAAAAAAAAAAAAAAAAAA#' + 'A'.repeat(43));
+
+            return { gefunden: window.qr._zaehleSuchmuster(matrix), kante: matrix.length };
+        });
+
+        // Die drei Suchmuster in den Ecken erzeugen solche Folgen; null wäre
+        // ein Zeichen dafür, dass die Zählung gar nichts mehr findet.
+        expect(treffer.kante).toBeGreaterThan(20);
+        expect(treffer.gefunden).toBeGreaterThan(0);
+    });
+
     test('ein echter Barcode-Leser bekommt den Link zurück', async ({ page, browserName }) => {
         test.skip(browserName !== 'chromium', 'BarcodeDetector gibt es nur in Chromium.');
 
